@@ -11,6 +11,7 @@ TODO:
 * Animate pets
 * More pet variety and size variety
 * Pets wander when mouse not near them
+* How many count taps for source values - maybe should be divided by 2, as one tap can fill all 6 bottles sometimes!
 
 
 Alchemical Menagerie

@@ -7,7 +7,7 @@ const local_storage = require('./local_storage.js');
 const particle_data = require('./particle_data.js');
 const random_seed = require('random-seed');
 
-const { v2Build, v3Add, v3Build, v3BuildZero, v3Max, v3Sub, v4Build } = VMath;
+const { v2Build, v3Add, v3Build, v3BuildZero, v3Max, v3Min, v3Sub, v4Build } = VMath;
 const { min, max, PI } = Math;
 const { defaults, merge, clone } = require('../common/util.js');
 
@@ -38,6 +38,7 @@ const PEN_H = 944;
 const sprite_size = 160;
 const PET_SIZE = sprite_size;
 const MULLIGAN_MAX = 3;
+const POTENCY_MAX = 10;
 
 const connectivity = {
   'corner': [[TOP, RIGHT]],
@@ -147,6 +148,14 @@ export function main(canvas) {
       game_state.board.push(row);
     }
   }
+
+  function newSink() {
+    return {
+      value: v3Build(0, 0, 0),
+      offset: rand.random() * 16,
+    };
+  }
+
   function randomizeArray(arr) {
     for (let ii = arr.length - 1; ii >= 0; --ii) {
       let idx = rand(ii + 1);
@@ -177,9 +186,7 @@ export function main(canvas) {
       } else {
         game_state.sources.push(null);
       }
-      game_state.sinks.push({
-        value: v3Build(0, 0, 0),
-      });
+      game_state.sinks.push(newSink());
     }
     randomizeArray(game_state.sources);
     let types = [0, 1, 2];
@@ -254,6 +261,7 @@ export function main(canvas) {
       if (brew[ii] !== null) {
         v3Add(sinks[ii].value, output_from_type[brew[ii].type], sinks[ii].value);
         v3Max(sinks[ii].value, VMath.zero_vec, sinks[ii].value);
+        v3Min(sinks[ii].value, [POTENCY_MAX, POTENCY_MAX, POTENCY_MAX], sinks[ii].value);
         assert(brew[ii].uid);
         merge(used, brew[ii].uid);
       }
@@ -306,6 +314,8 @@ export function main(canvas) {
     }, params_square);
     sprites.beaker_full = createSpriteSimple('beaker-full', sprite_size, sprite_size * 1.5, params_beaker);
     sprites.beaker_empty = createSpriteSimple('beaker-empty', sprite_size, sprite_size * 1.5,
+      defaults({ layers: 1 }, params_beaker));
+    sprites.beaker_select = createSpriteSimple('beaker-select', sprite_size, sprite_size * 1.5,
       defaults({ layers: 1 }, params_beaker));
 
     sprites.pet_select = [];
@@ -436,6 +446,7 @@ export function main(canvas) {
           };
           if (glov_input.clickHit(param)) {
             // TODO: Confirm modal if wasting existing souce?
+            glov_ui.setMouseOver(`source_${ii}`);
             glov_ui.playUISound('button_click');
             for (let jj = 0; jj < meat.length; ++jj) {
               let idx = ii + jj;
@@ -557,22 +568,40 @@ export function main(canvas) {
     for (let ii = 0; ii < PIPE_DIM; ++ii) {
       let b = game_state.sinks[ii];
       let type = beakerType(b.value, 3);
+      let param = {
+        x: x0 + sprite_size * ii,
+        y: y0 + b.offset - 16,
+        z: Z.SPRITES,
+        size: [1, 1], // drawing
+        w: sprite_size, // mouse
+        h: sprite_size * 1.5,
+      };
       if (type < 0) {
-        sprites.beaker_empty.drawDualTint({
-          x: x0 + sprite_size * ii,
-          y: y0,
-          z: Z.SPRITES,
-          size: [1, 1],
-        });
+        sprites.beaker_empty.draw(param);
       } else {
-        sprites.beaker_full.drawDualTint({
-          x: x0 + sprite_size * ii,
-          y: y0,
-          z: Z.SPRITES,
-          color: fluid_colors[type],
-          color1: fluid_colors_glow[type],
-          size: [1, 1],
-        });
+        let selected = 0;
+        if (glov_input.clickHit(param)) {
+          glov_ui.setMouseOver(b);
+          glov_ui.playUISound('select');
+          game_state.selected = ['sink', ii];
+          selected = 1;
+        } else if (game_state.selected && game_state.selected[0] === 'sink' && game_state.selected[1] === ii) {
+          selected = 0.75;
+        }
+        if (glov_input.isMouseOver(param)) {
+          glov_ui.setMouseOver(b);
+          if (!selected) {
+            selected = 0.5;
+          }
+        }
+        param.color = fluid_colors[type];
+        param.color1 = fluid_colors_glow[type];
+        sprites.beaker_full.drawDualTint(param);
+        if (selected) {
+          param.color = v4Build(1, 1, 1, selected);
+          param.z--;
+          sprites.beaker_select.draw(param);
+        }
       }
     }
   }
@@ -619,8 +648,17 @@ export function main(canvas) {
     });
   }
 
+  function feedPet(pet_idx, sink_idx) {
+    let pet = game_state.pen[pet_idx];
+    let sink = game_state.sinks[sink_idx];
+    assert(pet);
+    v3Add(pet.value, sink.value, pet.value);
+    game_state.sinks[sink_idx] = newSink();
+  }
+
   function drawPen(dt) {
     let { pen } = game_state;
+    let sink_selected = game_state.selected && game_state.selected[0] === 'sink';
     for (let ii = 0; ii < pen.length; ++ii) {
       let pet = pen[ii];
       let type = beakerType(pet.value, pet.size);
@@ -640,11 +678,16 @@ export function main(canvas) {
       sprites.pets[pet.species].drawDualTint(param);
 
       let selected = 0;
-      let selectable = meatFromPet(pet).length;
+      let selectable = sink_selected || meatFromPet(pet).length;
       if (selectable && glov_input.clickHit(param)) {
         glov_ui.playUISound('select');
         selected = 1;
-        game_state.selected = ['pet', ii];
+        if (sink_selected) {
+          // Feed them!
+          feedPet(ii, game_state.selected[1]);
+        } else {
+          game_state.selected = ['pet', ii];
+        }
       } else if (game_state.selected && game_state.selected[0] === 'pet' && game_state.selected[1] === ii) {
         selected = 0.75;
       }
