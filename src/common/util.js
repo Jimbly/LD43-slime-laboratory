@@ -24,6 +24,15 @@ export function merge(dest, src) {
   return dest;
 }
 
+export function defaults(dest, src) {
+  for (let f in src) {
+    if (!Object.prototype.hasOwnProperty.call(dest, f)) {
+      dest[f] = src[f];
+    }
+  }
+  return dest;
+}
+
 export function cloneShallow(src) {
   return merge({}, src);
 }
