@@ -8,7 +8,9 @@ LD43 Entry by Jimbly
 Start with: `npm start` (after running `npm i` once)
 
 TODO:
-* Make game
+* Animate pets
+* More pet variety and size variety
+* Pets wander when mouse not near them
 
 
 Alchemical Menagerie
@@ -22,7 +24,7 @@ Alchemical Menagerie
 ** Pipe Dreams
 *** Generate board that's guaranteed to make a few paths (generate 3 paths, then rotate, than fill in random? just do random and see how it goes?)
 *** Allow dragging of creatures to taps
-*** Button to clear individual taps
+*** Button to clear individual taps - no, just overwrite
 *** Show how much is left in each tap
 *** Show current results
 *** Quick animation up clicking Brew
