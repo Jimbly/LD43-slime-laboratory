@@ -2,11 +2,14 @@
 /*global VMath: false */
 /*global Z: false */
 
+const assert = require('assert');
 const local_storage = require('./local_storage.js');
 const particle_data = require('./particle_data.js');
+const random_seed = require('random-seed');
 
-const { v4Build } = VMath;
+const { v3Add, v3Build, v3Max, v4Build } = VMath;
 const { min, max, PI } = Math;
+const { defaults, merge } = require('../common/util.js');
 
 local_storage.storage_prefix = 'glovjs-playground';
 window.Z = window.Z || {};
@@ -21,12 +24,35 @@ export const game_height = 1600;
 
 export let sprites = {};
 
+const TOP = 0;
+const RIGHT = 1;
+const BOTTOM = 2;
+const LEFT = 3;
+const dx = [0, 1, 0, -1];
+const dy = [-1, 0, 1, 0];
+
+const connectivity = {
+  'corner': [[TOP, RIGHT]],
+  'cross': [[TOP, BOTTOM], [LEFT, RIGHT]],
+  'merge': [[TOP, RIGHT, BOTTOM, LEFT]],
+  'straight': [[TOP, BOTTOM]],
+  't': [[TOP, RIGHT, BOTTOM]],
+  'zig': [[TOP, RIGHT], [LEFT, BOTTOM]],
+};
+
+const PIPE_DIM = 6;
+const PIPE_TYPES = [
+  'corner',
+  'cross',
+  'merge',
+  'straight',
+  't',
+  'zig',
+];
+
 export function main(canvas) {
   const glov_engine = require('./glov/engine.js');
   const glov_font = require('./glov/font.js');
-  const random_seed = require('random-seed');
-
-  const { defaults } = require('../common/util.js');
 
   glov_engine.startup({
     canvas,
@@ -59,19 +85,25 @@ export function main(canvas) {
     v4Build(0.820, 0.247, 0.541, 1),
     v4Build(0.541, 0.820, 0.247, 1),
     v4Build(0.247, 0.541, 0.820, 1),
-    v4Build(0.820, 0.522, 0.547, 1),
+
+    v4Build(0.820, 0.525, 0.247, 1),
     v4Build(0.247, 0.820, 0.525, 1),
-    v4Build(0.533, 0.247, 0.820, 1),
-    v4Build(0.290, 0.208, 0.133, 1),
+    v4Build(0.525, 0.247, 0.820, 1),
+
+    v4Build(0.290, 0.208, 0.133, 1), // poo
+    v4Build(0.820, 0.820, 0.525, 1), // gold
   ];
   const fluid_colors_glow = [
     v4Build(0.933, 0.400, 0.827, 1),
     v4Build(0.831, 0.933, 0.400, 1),
     v4Build(0.400, 0.827, 0.933, 1),
-    v4Build(0.933, 0.827, 0.827, 1),
+
+    v4Build(0.933, 0.827, 0.400, 1),
     v4Build(0.400, 0.933, 0.827, 1),
     v4Build(0.827, 0.400, 0.933, 1),
-    v4Build(0.290, 0.208, 0.133, 1),
+
+    v4Build(0.145, 0.104, 0.067, 1),
+    v4Build(0.933, 0.933, 0.827, 1),
   ];
 
   // Cache key_codes
@@ -80,15 +112,12 @@ export function main(canvas) {
 
   let rand;
   let game_state;
-  const PIPE_DIM = 6;
-  const PIPE_TYPES = [
-    'corner',
-    'cross',
-    'merge',
-    'straight',
-    't',
-    'zig',
-  ];
+
+  function typeMix(type1, type2) {
+    let a = min(type1, type2);
+    let b = max(type1, type2);
+    return 3 + (b - 1) * 2 - a; // 0 + 1 = 3; 1 + 2 = 4; 2 + 0 = 5
+  }
 
   function newPipe() {
     return {
@@ -96,18 +125,26 @@ export function main(canvas) {
       rot: rand(4),
     };
   }
-  function newGame() {
-    rand = random_seed.create(1234);
-    game_state = {
-      board: [],
-      sources: [],
-    };
+  function newPipes() {
+    game_state.board = [];
     for (let ii = 0; ii < PIPE_DIM; ++ii) {
       let row = [];
       for (let jj = 0; jj < PIPE_DIM; ++jj) {
         row.push(newPipe());
       }
       game_state.board.push(row);
+    }
+  }
+  function newGame() {
+    rand = random_seed.create(3);
+    game_state = {
+      board: [[]],
+      sources: [],
+      sinks: [],
+      mulligan: 2,
+    };
+    newPipes();
+    for (let ii = 0; ii < PIPE_DIM; ++ii) {
       if (rand(2)) {
         game_state.sources.push({
           type: rand(3),
@@ -115,6 +152,72 @@ export function main(canvas) {
         });
       } else {
         game_state.sources.push(null);
+      }
+      game_state.sinks.push({
+        value: v3Build(0, 0, 0),
+      });
+    }
+  }
+
+  function calcBrew() {
+    let { board, sinks } = game_state;
+    let ret = [];
+    for (let ii = 0; ii < sinks.length; ++ii) {
+      let pipe = board[PIPE_DIM-1][ii];
+      let con = connectivity[pipe.type];
+      let check = (BOTTOM - pipe.rot + 4) % 4;
+
+      let subset = -1;
+      for (let kk = 0; kk < con.length; ++kk) {
+        let conset = con[kk];
+        for (let jj = 0; jj < conset.length; ++jj) {
+          if (conset[jj] === check) {
+            subset = kk;
+          }
+        }
+      }
+
+      if (subset === -1 || !pipe.fill[subset].uid) {
+        ret.push(null);
+      } else {
+        ret.push(pipe.fill[subset]);
+      }
+    }
+    return ret;
+  }
+
+  const output_from_type = [
+    v3Build(2, 0, -1),
+    v3Build(-1, 2, 0),
+    v3Build(0, -1, 2),
+
+    v3Build(1, 1, -1),
+    v3Build(-1, 1, 1),
+    v3Build(1, -1, 1),
+
+    v3Build(-1, -1, -1),
+  ];
+
+  function doBrew() {
+    let { sources, sinks } = game_state;
+    let brew = calcBrew();
+    let used = {};
+    for (let ii = 0; ii < sinks.length; ++ii) {
+      if (brew[ii] !== null) {
+        v3Add(sinks[ii].value, output_from_type[brew[ii].type], sinks[ii].value);
+        v3Max(sinks[ii].value, VMath.zero_vec, sinks[ii].value);
+        assert(brew[ii].uid);
+        merge(used, brew[ii].uid);
+      }
+    }
+    // Drain sources if they went to any sink
+    for (let ii = 0; ii < sources.length; ++ii) {
+      if (used[ii + 1]) {
+        let s = sources[ii];
+        --s.count;
+        if (!s.count) {
+          s.type = 6;
+        }
       }
     }
   }
@@ -196,9 +299,13 @@ export function main(canvas) {
         };
         if (rotateable && pipe.type !== 'cross' && pipe.type !== 'merge') {
           let { ret, state } = glov_ui.buttonShared(param);
+          if (!ret) {
+            param.button = 1;
+            ret = ret || glov_ui.buttonShared(param).ret;
+          }
 
           if (ret) {
-            pipe.rot = (pipe.rot + 1) % 4;
+            pipe.rot = (pipe.rot + (param.button ? 3 : 1)) % 4;
           }
           if (state === 'rollover') {
             const pad = 8;
@@ -232,49 +339,77 @@ export function main(canvas) {
     }
   }
 
+  function beakerType(value) {
+    let sort = [0, 1, 2];
+    sort.sort(function (a, b) {
+      return value[b] - value[a];
+    });
+    if (!value[sort[0]]) {
+      return -1;
+    }
+    if (!value[sort[1]] || value[sort[0]] - value[sort[1]] >= 3) {
+      return sort[0];
+    }
+    if (!value[sort[2]] || value[sort[1]] - value[sort[2]] >= 3) {
+      return typeMix(sort[0], sort[1]);
+    }
+    return 7;
+  }
+
   function drawBeakers(dt) {
     let x0 = 1440;
     let y0 = 1120;
     for (let ii = 0; ii < PIPE_DIM; ++ii) {
-      sprites.beaker_full.drawDualTint({
-        x: x0 + sprite_size * ii,
-        y: y0,
-        z: Z.SPRITES,
-        color: fluid_colors[0],
-        color1: fluid_colors_glow[0],
-        size: [1, 1],
-      });
+      let b = game_state.sinks[ii];
+      let type = beakerType(b.value);
+      if (type < 0) {
+        sprites.beaker_empty.drawDualTint({
+          x: x0 + sprite_size * ii,
+          y: y0,
+          z: Z.SPRITES,
+          size: [1, 1],
+        });
+      } else {
+        sprites.beaker_full.drawDualTint({
+          x: x0 + sprite_size * ii,
+          y: y0,
+          z: Z.SPRITES,
+          color: fluid_colors[type],
+          color1: fluid_colors_glow[type],
+          size: [1, 1],
+        });
+      }
     }
   }
 
   function drawPipesUI(dt) {
-    glov_ui.buttonText({
+    let w = 310;
+    if (glov_ui.buttonText({
       x: 1440,
       y: 1360,
-      text: 'Brew!'
-    });
-    glov_ui.buttonText({
-      x: 2400 - glov_ui.button_width,
+      text: 'Brew!',
+      w,
+    })) {
+      doBrew();
+      // Switch to feed mode
+    }
+    if (glov_ui.buttonText({
+      x: 1440 + (2400 - 1440 - w) / 2,
       y: 1360,
-      text: 'Shop'
+      text: `New Pipes (${game_state.mulligan})`,
+      w,
+      disabled: !game_state.mulligan,
+    })) {
+      --game_state.mulligan;
+      newPipes();
+    }
+    glov_ui.buttonText({
+      x: 2400 - w,
+      y: 1360,
+      text: 'Shop',
+      w
     });
   }
-
-  const TOP = 0;
-  const RIGHT = 1;
-  const BOTTOM = 2;
-  const LEFT = 3;
-  const dx = [0, 1, 0, -1];
-  const dy = [-1, 0, 1, 0];
-
-  const connectivity = {
-    'corner': [[TOP, RIGHT]],
-    'cross': [[TOP, BOTTOM], [LEFT, RIGHT]],
-    'merge': [[TOP, RIGHT, BOTTOM, LEFT]],
-    'straight': [[TOP, BOTTOM]],
-    't': [[TOP, RIGHT, BOTTOM]],
-    'zig': [[TOP, RIGHT], [LEFT, BOTTOM]],
-  };
 
   function dofill(x, y, from_dir, type, uid) {
     if (x < 0 || y < 0 || x >= PIPE_DIM || y >= PIPE_DIM) {
@@ -299,7 +434,7 @@ export function main(canvas) {
       return;
     }
     let fill = pipe.fill[subset];
-    if (fill.uid === uid) {
+    if (fill.uid && fill.uid[uid]) {
       return;
     }
     if (fill.uid) {
@@ -307,9 +442,7 @@ export function main(canvas) {
       if (type !== fill.type) {
         if (fill.type < 3) {
           // good mix
-          let a = min(fill.type, type);
-          let b = max(fill.type, type);
-          fill.type = 3 + (b - 1) * 2 - a; // 0 + 1 = 3; 1 + 2 = 4; 2 + 0 = 5
+          fill.type = typeMix(fill.type, type);
         } else {
           if (fill.type === 6 ||
             type === 0 && (fill.type === 3 || fill.type === 5) ||
@@ -326,7 +459,8 @@ export function main(canvas) {
     } else {
       fill.type = type;
     }
-    fill.uid = uid;
+    fill.uid = fill.uid || {};
+    fill.uid[uid] = true;
 
     // recurse!
     for (let ii = 0; ii < fill_to.length; ++ii) {
@@ -342,7 +476,7 @@ export function main(canvas) {
     for (let ii = 0; ii < board.length; ++ii) {
       let row = board[ii];
       for (let jj = 0; jj < row.length; ++jj) {
-        row[jj].fill = [{ uid: 0 }, { uid: 0 }];
+        row[jj].fill = [{ uid: null }, { uid: null }];
       }
     }
     for (let ii = 0; ii < sources.length; ++ii) {

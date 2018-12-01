@@ -7,6 +7,8 @@
 
 const { Draw2D } = require('./tz/draw2d.js');
 
+VMath.zero_vec = VMath.v4BuildZero();
+
 export let glov_camera;
 export let glov_input;
 export let glov_sprite;
