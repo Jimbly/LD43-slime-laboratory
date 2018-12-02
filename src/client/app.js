@@ -231,26 +231,30 @@ export function main(canvas) {
   }
 
   function randomOrder(type) {
-    let difficulty = game_state.orders_done + 1;
+    let difficulty = game_state.orders_done + 1; // 1 - 8
     let options = [
       {
         type: 'potion',
         name: 'Pure Potion',
-        min: [3 + difficulty * 2, null, null],
+        min: [4 + difficulty * 0.75, null, null],
         max: [null, 0, 0],
       }, {
         type: 'potion',
         name: 'Potion of Elixir',
-        min: [difficulty / 2, difficulty / 2, difficulty / 2],
+        min: [1 + difficulty / 2, 1 + difficulty / 2, 1 + difficulty / 2],
         color: 7,
       }, {
         type: 'potion',
         name: 'Potion',
-        min: [2 + difficulty * 1.5, null, null],
+        min: [3 + difficulty * 0.5, null, null],
+      }, { // double odds
+        type: 'potion',
+        name: 'Potion',
+        min: [3 + difficulty * 0.5, null, null],
       }, {
         type: 'potion',
         name: 'Potion',
-        min: [difficulty * 2, difficulty / 2, null],
+        min: [1 + difficulty, difficulty / 2, null],
       }, {
         type: 'potion',
         name: 'Ptn of Bloodlust',
@@ -277,12 +281,16 @@ export function main(canvas) {
       }, {
         type: 'pet',
         name: 'Specialized Pet',
-        min: [2 + difficulty, null, null],
+        min: [3 + difficulty * 0.75, null, null],
         max: [null, difficulty / 3, difficulty / 3],
       }, {
         type: 'pet',
         name: 'Pet',
-        min: [difficulty, difficulty / 2, null],
+        min: [1 + difficulty, difficulty / 2, null],
+      }, { // double odds
+        type: 'pet',
+        name: 'Pet',
+        min: [1 + difficulty, difficulty / 2, null],
       }, {
         type: 'pet',
         name: 'Strong Pet',
@@ -309,7 +317,8 @@ export function main(canvas) {
       order = {
         type: 'potion',
         name: 'Ambrosia',
-        min: [POTENCY_MAX, POTENCY_MAX, POTENCY_MAX],
+        note: '(Potion)',
+        min: [POTENCY_MAX - 1, POTENCY_MAX - 1, POTENCY_MAX - 1],
         max: [POTENCY_MAX, POTENCY_MAX, POTENCY_MAX],
       };
     }
@@ -1193,6 +1202,9 @@ export function main(canvas) {
     if (game_state.selected[0] !== order.type) {
       return false;
     }
+    if (DEBUG && glov_input.isKeyDown(key_codes.SHIFT)) {
+      return true;
+    }
     let is_pet = order.type === 'pet';
     let holder = is_pet ? 'pen' : 'sinks';
     let thing = game_state[holder][game_state.selected[1]];
@@ -1299,6 +1311,15 @@ export function main(canvas) {
         x, y, Z.UI, font_size, glov_font.ALIGN.HCENTER, w, 0,
         order.name);
       y += font_size;
+
+      if (order.note !== undefined) {
+        font.drawSizedAligned(
+          glov_font.styleColored(null, 0x000000ff),
+          x, y, Z.UI, font_size, glov_font.ALIGN.HCENTER, w, 0,
+          order.note);
+        y += font_size;
+      }
+
       let all_same = true;
       for (let jj = 1; jj < 3; ++jj) {
         if (order.min && order.min[0] !== order.min[jj]) {

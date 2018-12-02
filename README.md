@@ -11,8 +11,6 @@ Notes:
 * Didn't realize could drag from beakers to pets, pets to orders, pets to spikes
 
 TODO:
-* Potion order requirements are a bit high too quickly? Especially Pure of 16!
-  * 10 of each (5 turns minimum) is probably a more reasonable max
 * High scores
 * Daily summary if things go wrong - especially if pets are starving - Modal confirm first
 * Show picked up potion and/or pet under mouse
