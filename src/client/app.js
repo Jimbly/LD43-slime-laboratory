@@ -8,7 +8,7 @@ const particle_data = require('./particle_data.js');
 const random_seed = require('random-seed');
 
 const { v2Build, v3Add, v3Build, v3BuildZero, v3Max, v3Min, v3Sub, v4Build } = VMath;
-const { abs, ceil, min, max, PI } = Math;
+const { abs, ceil, min, max, sin, PI } = Math;
 const { defaults, merge, clone, titleCase, lerp, easeInOut } = require('../common/util.js');
 
 let DEBUG = String(document.location).indexOf('localhost') !== -1;
@@ -320,6 +320,16 @@ export function main(canvas) {
         no_random: true,
       }
     ];
+    if (DEBUG && false) {
+      options = [
+        {
+          type: 'potion',
+          name: 'Potion',
+          min: [2, null, 2],
+          no_random: true,
+        }
+      ];
+    }
     let idx = game_state.orders_done + game_state.orders.length + 1;
     options = options.filter((order) => order.type === type);
     options = options.filter((order) => !order.min_idx || idx >= order.min_idx);
@@ -721,6 +731,10 @@ export function main(canvas) {
     return ret;
   }
 
+  function isSelected(type, value) {
+    return game_state.selected && game_state.selected[0] === type && game_state.selected[1] === value;
+  }
+
   function drawSources(dt) {
     let { selected } = game_state;
     let sources = clone(game_state.sources);
@@ -902,7 +916,42 @@ export function main(canvas) {
     }
   }
 
-  function drawBeakers(dt) {
+  function selectedMeetsOrder(order, selected) {
+    if (!selected) {
+      return false;
+    }
+    if (selected[0] !== order.type) {
+      return false;
+    }
+    if (DEBUG && glov_input.isKeyDown(key_codes.SHIFT)) {
+      return true;
+    }
+    let is_pet = order.type === 'pet';
+    let holder = is_pet ? 'pen' : 'sinks';
+    let thing = game_state[holder][selected[1]];
+    if (order.color !== undefined) {
+      if (order.color !== beakerType(thing.value, 3)) {
+        return false;
+      }
+    }
+    if (order.min) {
+      for (let ii = 0; ii < 3; ++ii) {
+        if (order.min[ii] !== null && thing.value[ii] < order.min[ii]) {
+          return false;
+        }
+      }
+    }
+    if (order.max) {
+      for (let ii = 0; ii < 3; ++ii) {
+        if (order.max[ii] !== null && thing.value[ii] > order.max[ii]) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function drawSinks(dt) {
     let brew = calcBrew();
     let x0 = 1440;
     let y0 = 1120;
@@ -912,7 +961,7 @@ export function main(canvas) {
       let param = {
         x: x0 + sprite_size * ii,
         y: y0 + b.offset - 16,
-        z: Z.SPRITES,
+        z: Z.SPRITES + 3,
         size: [1, 1], // drawing
         w: sprite_size, // mouse
         h: sprite_size * 1.5,
@@ -930,13 +979,13 @@ export function main(canvas) {
         if (glov_input.clickHit(param)) {
           over = true;
           glov_ui.playUISound('select');
-          if (game_state.selected && game_state.selected[0] === 'potion' && game_state.selected[1] === ii) {
+          if (isSelected('potion', ii)) {
             game_state.selected = null;
           } else {
             game_state.selected = ['potion', ii];
           }
           selected = 1;
-        } else if (game_state.selected && game_state.selected[0] === 'potion' && game_state.selected[1] === ii) {
+        } else if (isSelected('potion', ii)) {
           selected = 0.75;
         }
         if (glov_input.isMouseOver(param)) {
@@ -949,7 +998,7 @@ export function main(canvas) {
         param.color = fluid_colors[type];
         param.color1 = fluid_colors_glow[type];
         sprites.beaker_full.drawDualTint(param);
-        if (game_state.selected && game_state.selected[0] === 'potion' && game_state.selected[1] === ii) {
+        if (isSelected('potion', ii)) {
           let mpos = glov_input.mousePos();
           sprites.beaker_full.drawDualTint(defaults({
             x: mpos[0] - sprite_size / 2,
@@ -958,10 +1007,22 @@ export function main(canvas) {
             color: v4Build(param.color[0], param.color[1], param.color[2], 0.5),
           }, param));
         }
+        param.z--;
         if (selected) {
           param.color = v4Build(1, 1, 1, selected);
-          param.z--;
           sprites.beaker_select.draw(param);
+        } else {
+          let useful = false;
+          for (let jj = 0; jj < game_state.orders.length; ++jj) {
+            let order = game_state.orders[jj];
+            if (order && selectedMeetsOrder(order, ['potion', ii])) {
+              useful = true;
+            }
+          }
+          if (useful) {
+            param.color = v4Build(1, 1, 0, 0.5 * abs(sin(glov_engine.getFrameTimestamp() * 0.005)));
+            sprites.beaker_select.draw(param);
+          }
         }
       }
 
@@ -1297,7 +1358,7 @@ export function main(canvas) {
     for (let ii = 0; ii < pen.length; ++ii) {
       let pet = pen[ii];
       let alpha = 1;
-      if (game_state.selected && game_state.selected[0] === 'pet' && game_state.selected[1] === ii) {
+      if (isSelected('pet', ii)) {
         let mpos = glov_input.mousePos();
         drawPet(pet, mpos[0] - petWidth(pet) / 2, mpos[1] - petHeight(pet) / 2, Z.DRAG, 0.5);
         alpha = 0.75;
@@ -1325,7 +1386,7 @@ export function main(canvas) {
         } else {
           game_state.selected = ['pet', ii];
         }
-      } else if (game_state.selected && game_state.selected[0] === 'pet' && game_state.selected[1] === ii) {
+      } else if (isSelected('pet', ii)) {
         selected = 0.75;
         let pen_param = {
           x: PEN_X0,
@@ -1337,7 +1398,7 @@ export function main(canvas) {
         if ((mpos = glov_input.clickHit(pen_param))) {
           game_state.selected = null;
           pet.pos[0] = min(max(PEN_X0, mpos[0] - petWidth(pet) / 2),
-            PEN_X0 + PEN_W - pet.size * sprite_size);
+            PEN_X0 + PEN_W - petWidth(pet));
           pet.pos[1] = min(max(PEN_Y0, mpos[1] - petHeight(pet) / 2), PEN_Y0 + PEN_H - sprite_size);
           need_sort = true;
         }
@@ -1348,17 +1409,31 @@ export function main(canvas) {
           selected = 0.5;
         }
       }
+      param.z -= 0.5;
       if (selected) {
         param.color = v4Build(1, 1, 1, selected);
-        param.z -= 0.5;
         sprites.pet_select[1/*pet.size*/].draw(param);
+      } else {
+        // check if any order is satisfied by this pet
+        let useful = false;
+        for (let jj = 0; jj < game_state.orders.length; ++jj) {
+          let order = game_state.orders[jj];
+          if (order && selectedMeetsOrder(order, ['pet', ii])) {
+            useful = true;
+          }
+        }
+        if (useful) {
+          param.color = v4Build(1, 1, 0, 0.5 * abs(sin(glov_engine.getFrameTimestamp() * 0.005)));
+          sprites.pet_select[1/*pet.size*/].draw(param);
+        }
       }
+
 
       if (over) {
         glov_ui.setMouseOver(pet);
         let tooltip_w = 400;
         let pad = 16;
-        let tooltip_x = param.x + (sprite_size * pet.size - tooltip_w) / 2;
+        let tooltip_x = param.x + (petWidth(pet) - tooltip_w) / 2;
         if (tooltip_x < glov_camera.x0()) {
           tooltip_x = glov_camera.x0();
         }
@@ -1425,41 +1500,6 @@ export function main(canvas) {
     }
   }
 
-  function selectedMeetsOrder(order) {
-    if (!game_state.selected) {
-      return false;
-    }
-    if (game_state.selected[0] !== order.type) {
-      return false;
-    }
-    if (DEBUG && glov_input.isKeyDown(key_codes.SHIFT)) {
-      return true;
-    }
-    let is_pet = order.type === 'pet';
-    let holder = is_pet ? 'pen' : 'sinks';
-    let thing = game_state[holder][game_state.selected[1]];
-    if (order.color !== undefined) {
-      if (order.color !== beakerType(thing.value, 3)) {
-        return false;
-      }
-    }
-    if (order.min) {
-      for (let ii = 0; ii < 3; ++ii) {
-        if (order.min[ii] !== null && thing.value[ii] < order.min[ii]) {
-          return false;
-        }
-      }
-    }
-    if (order.max) {
-      for (let ii = 0; ii < 3; ++ii) {
-        if (order.max[ii] !== null && thing.value[ii] > order.max[ii]) {
-          return false;
-        }
-      }
-    }
-    return true;
-  }
-
   function fulfillOrder(order_idx) {
     let order = game_state.orders[order_idx];
     let is_pet = order.type === 'pet';
@@ -1520,7 +1560,7 @@ export function main(canvas) {
       let h = ORDERS_Y0 + ORDERS_H - y;
       let param = { x, y, w, h };
       if (game_state.selected) {
-        if (selectedMeetsOrder(order)) {
+        if (selectedMeetsOrder(order, game_state.selected)) {
           let { ret, state } = glov_ui.buttonShared(param);
           if (ret) {
             fulfillOrder(ii);
@@ -1528,7 +1568,8 @@ export function main(canvas) {
           if (state === 'rollover') {
             param.color = v4Build(0.75, 1, 0.75, 1);
           } else {
-            param.color = v4Build(0.5, 1, 0.5, 1);
+            let glow = 0.25 * abs(sin(glov_engine.getFrameTimestamp() * 0.005));
+            param.color = v4Build(0.5, 0.75 + glow, 0.5, 1);
           }
         } else {
           param.color = v4Build(0.3, 0.3, 0.3, 1);
@@ -1796,7 +1837,7 @@ export function main(canvas) {
 
     drawSources(dt);
     drawPipes(dt);
-    drawBeakers(dt);
+    drawSinks(dt);
     drawPen(dt);
 
     drawButtons(dt);
