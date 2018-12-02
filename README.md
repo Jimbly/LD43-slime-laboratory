@@ -1,14 +1,11 @@
-Ludum Dare 43 - TBD
+Ludum Dare 43 - Sacrifices Must Be Made
 ============================
 
-LD43 Entry by Jimbly
+LD43 Entry by Jimbly - "Slime Laboratory"
 
 * Using [Javascript libGlov/GLOV.js framework](https://github.com/Jimbly/turbulenz-playground)
 
 Start with: `npm start` (after running `npm i` once)
-
-TODO:
-* Would be useful to see current stats of all potions (and pets) - roll over something and they all show up? Always there? Hold shift?
 
 Polish
 * Tutorial or more instruction - Help button with flow-chart?
@@ -17,7 +14,6 @@ Polish
   * Brew burble
 * Pets wander when mouse not near them
 * Pets smoothly move from position to position, including from store purchase window
-* Quick animation up clicking Brew
 
 Graphics
 * Shadows under pets
