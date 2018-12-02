@@ -253,18 +253,19 @@ class GlovUI {
     if (x + tooltip_w > this.camera.x1()) {
       x = this.camera.x1() - tooltip_w;
     }
+    let z = param.z || Z.TOOLTIP;
     let tooltip_y0 = param.y;
     let tooltip_pad = param.tooltip_pad || this.tooltip_pad;
     let y = tooltip_y0 + tooltip_pad;
     y += this.font.drawSizedWrapped(this.modal_font_style,
-      x + tooltip_pad, y, Z.TOOLTIP+1, tooltip_w - tooltip_pad * 2, 0, this.font_height,
+      x + tooltip_pad, y, z+1, tooltip_w - tooltip_pad * 2, 0, this.font_height,
       param.tooltip);
     y += tooltip_pad;
 
     this.panel({
       x,
       y: tooltip_y0,
-      z: Z.TOOLTIP,
+      z,
       w: tooltip_w,
       h: y - tooltip_y0,
     });

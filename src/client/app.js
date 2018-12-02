@@ -8,7 +8,7 @@ const local_storage = require('./local_storage.js');
 const particle_data = require('./particle_data.js');
 const random_seed = require('random-seed');
 
-const { v2Build, v3Add, v3Build, v3BuildZero, v3Lerp, v3Max, v3Min, v3Sub, v4Build } = VMath;
+const { v2Build, v3Add, v3Build, v3BuildZero, v3Equal, v3Lerp, v3Max, v3Min, v3Sub, v4Build } = VMath;
 const { abs, ceil, min, max, round, sin, PI } = Math;
 const { clamp, defaults, merge, clone, titleCase, lerp, easeInOut } = require('../common/util.js');
 
@@ -44,10 +44,10 @@ const sprite_size = 160;
 const PET_SIZE = sprite_size;
 const MULLIGAN_MAX = 3;
 const POTENCY_MAX = 16;
-const ORDERS_FINAL = DEBUG ? 1 : 10;
+const ORDERS_FINAL = 10;
 const ROT_TIME = 500;
 
-const DRAIN_TIME_PER_STEP = DEBUG ? 10 : 120;
+const DRAIN_TIME_PER_STEP = DEBUG ? 60 : 120;
 
 const potency_to_increase = [
   0,
@@ -153,7 +153,7 @@ export function main(canvas) {
       // menu_entry: ['ui.local/button_down.png', [34, 60, 34], [63]],
       // menu_selected: ['ui.local/button_rollover.png', [34, 60, 34], [63]],
       // menu_down: ['ui.local/button_down.png', [34, 60, 34], [63]],
-      panel: ['ui.local/panel.png', [12, 104, 12], [12, 104, 12]],
+      panel: ['ui.local/panel.png', [11, 26, 11], [11, 20, 11]],
     }
   });
 
@@ -221,6 +221,8 @@ export function main(canvas) {
   let rand_orders;
   let game_state;
   let brew_anim;
+  let tooltips_on = false;
+  let tooltips_on_toggle = false;
 
   // higher score is "better"
   const score_mod1 = 10000;
@@ -1004,28 +1006,36 @@ export function main(canvas) {
     let style = glov_font.styleColored(null, 0x00000000 | (alpha * 255));
     let size = 48 * scale;
     let y = y0;
-    let output = output_from_type[brew[ii].type];
+    let output = brew[ii] ? output_from_type[brew[ii].type] : [0,0,0];
     let color = v4Build(1, 1, 1, alpha);
     let sink = game_state.sinks[ii];
+    if (!brew[ii] && v3Equal(sink.value, VMath.zero_vec, 0.0001)) {
+      return;
+    }
+    let w = (detailed ? sprite_size : sprite_size * 10 / 12) * scale + (detailed ? 8 : 0);
     for (let jj = 0; jj < 3; ++jj) {
       if (output[jj] || detailed) {
+        let size_offs = 0;
         if (detailed) {
           let v = sink.value[jj];
           let d = output[jj];
+          if (output[jj]) {
+            size_offs = size / 2;
+          }
           if (sink.blend) {
             let dd = round(sink.blend * d);
             v += dd;
             v = clamp(v, 0, POTENCY_MAX);
             d -= dd;
           }
-          font.drawSized(style, x_mid - size, y, Z.TOOLTIP, size,
-            `= ${v} ${d ? `${output[jj] > 0 ? '+ ' : '- '}${abs(d)}` : ''}`);
+          font.drawSizedAligned(style, x_mid - size_offs, y, Z.TOOLTIP, size, glov_font.ALIGN.HFIT, w / 2 + size_offs - 12, 0,
+            `${v} ${d ? `${output[jj] > 0 ? '+' : '-'}${abs(d)}` : ''}`);
         } else {
           font.drawSized(style, x_mid, y, Z.TOOLTIP, size,
             `${output[jj] > 0 ? '+' : ''}${output[jj]}`);
         }
         sprites.icons.draw({
-          x: x_mid - size - (detailed ? size : 0),
+          x: x_mid - size - size_offs,
           y,
           z: Z.TOOLTIP + 1,
           size: [size, size],
@@ -1035,7 +1045,6 @@ export function main(canvas) {
         y += size;
       }
     }
-    let w = sprite_size * 10 / 12 * scale + (detailed ? size * scale * 1.25 : 0);
     glov_ui.panel({
       x: x_mid - w / 2,
       w,
@@ -1066,9 +1075,9 @@ export function main(canvas) {
         h: sprite_size * 1.5,
       };
 
-      if (zoom) {
+      if (zoom || tooltips_on) {
         // display stats in panel above beaker
-        showSinkTooltip(brew, ii, zoom, 1 + zoom, true);
+        showSinkTooltip(brew, ii, tooltips_on ? 1 : zoom, 1 + zoom, true);
       }
 
       let over = false;
@@ -1326,6 +1335,7 @@ export function main(canvas) {
       tooltip,
       x: x - w / 2,
       y: y - (16*2+48) / 2,
+      z: Z.TOOLTIP + 200,
       tooltip_width: w,
     });
   }
@@ -1348,7 +1358,9 @@ export function main(canvas) {
     for (let ii = 0; ii < PIPE_DIM; ++ii) {
       if (brew[ii]) {
         any_output = true;
-        showSinkTooltip(brew, ii, 1, 1, false);
+        if (!tooltips_on) {
+          showSinkTooltip(brew, ii, 1, 1, false);
+        }
       }
     }
     let x0 = 1440;
@@ -1489,6 +1501,17 @@ export function main(canvas) {
         shop_up = true;
       }
     }
+
+    if (glov_ui.buttonText({
+      x: game_width - glov_ui.button_height * 2,
+      y: game_height - glov_ui.button_height * 2,
+      text: 'i',
+      w: glov_ui.button_height,
+    })) {
+      tooltips_on_toggle = !tooltips_on_toggle;
+    }
+    tooltips_on = !brew_anim && (tooltips_on_toggle || glov_ui.button_mouseover ||
+      glov_input.isKeyDown(key_codes.SHIFT) || glov_input.isKeyDown(key_codes.F1));
   }
 
   function feedPet(pet_idx, sink_idx) {
@@ -1605,15 +1628,17 @@ export function main(canvas) {
 
       if (over) {
         glov_ui.setMouseOver(pet);
+      }
+      if (over || tooltips_on) {
         let tooltip_w = 400;
         let pad = 16;
         let tooltip_x = param.x + (petWidth(pet) - tooltip_w) / 2;
         if (tooltip_x < glov_camera.x0()) {
           tooltip_x = glov_camera.x0();
         }
-        let tooltip_y0 = param.y + sprite_size;
+        let tooltip_y0 = param.y + petHeight(pet) - pad * 2;
         let tooltip_y = tooltip_y0 + pad;
-        let z = Z.TOOLTIP;
+        let z = Z.TOOLTIP + ii * 10;
         let font_size = 48;
         let style = glov_font.styleColored(null, 0x000000ff);
         font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER, tooltip_w, 0,
@@ -1663,7 +1688,7 @@ export function main(canvas) {
         glov_ui.panel({
           x: tooltip_x,
           y: tooltip_y0,
-          z: Z.TOOLTIP - 1,
+          z: z - 1,
           w: tooltip_w,
           h: tooltip_y + pad - tooltip_y0,
         });
