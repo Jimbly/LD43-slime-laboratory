@@ -8,8 +8,13 @@ LD43 Entry by Jimbly
 Start with: `npm start` (after running `npm i` once)
 
 TODO:
-* Show colors in goals better - Add names to potions and slimes?
+* Potion order requirements are a bit high too quickly? Especially Pure of 16!
+  * 10 of each (5 turns minimum) is probably a more reasonable max
+* Need more diminishing returns when feeding pets - feeding a S=8 pet a S=2 potion should not still add 2!  (Fractional, but hidden?)
+  * Or, diminishing return is when harvesting for ingredients, yeah.
 
+* High scores
+* Would be useful to see current stats of all potions (and pets) - roll over something and they all show up? Always there? Hold shift?
 * Pets grow in size after being fed?  Or their size is fixed?
 * New button and panel graphics
 * Allow selecting pet first, then food, show same tooltip
