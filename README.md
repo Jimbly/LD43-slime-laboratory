@@ -11,7 +11,6 @@ Notes:
 * Didn't realize could drag from beakers to pets, pets to orders, pets to spikes
 
 TODO:
-* Separate seeded random for orders for consistency / high scores
 * Potion order requirements are a bit high too quickly? Especially Pure of 16!
   * 10 of each (5 turns minimum) is probably a more reasonable max
 * High scores
@@ -25,7 +24,7 @@ TODO:
 
 Polish
 * Animate pipes rotating
-* Tutorial or more instruction
+* Tutorial or more instruction - Help button with flow-chart?
 * Sounds / Music
   * Sacrifice squish
   * Brew burble

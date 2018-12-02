@@ -187,6 +187,7 @@ export function main(canvas) {
 
   let shop_up = false;
   let rand;
+  let rand_orders;
   let game_state;
 
   function typeMix(type1, type2) {
@@ -219,9 +220,10 @@ export function main(canvas) {
     };
   }
 
-  function randomizeArray(arr) {
+  function randomizeArray(arr, r) {
+    r = r || rand;
     for (let ii = arr.length - 1; ii >= 0; --ii) {
-      let idx = rand(ii + 1);
+      let idx = r(ii + 1);
       let t = arr[ii];
       arr[ii] = arr[idx];
       arr[idx] = t;
@@ -302,7 +304,7 @@ export function main(canvas) {
       }
     ];
     options = options.filter((order) => order.type === type);
-    let order = options[rand(options.length)];
+    let order = options[rand_orders(options.length)];
     if (!game_state.endless && game_state.orders_done + game_state.orders.length + 1 === ORDERS_FINAL) {
       order = {
         type: 'potion',
@@ -312,7 +314,7 @@ export function main(canvas) {
       };
     }
     let permute = [0, 1, 2];
-    randomizeArray(permute);
+    randomizeArray(permute, rand_orders);
     ['min', 'max'].forEach((field) => {
       if (order[field]) {
         // Swap order of all array parameters
@@ -403,6 +405,7 @@ export function main(canvas) {
   function newGame() {
     shop_up = false;
     rand = random_seed.create(3);
+    rand_orders = random_seed.create(123);
     game_state = {
       endless: false,
       selected: null,
