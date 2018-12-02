@@ -7,16 +7,25 @@ LD43 Entry by Jimbly
 
 Start with: `npm start` (after running `npm i` once)
 
+Notes:
+* Didn't realize could drag from beakers to pets, pets to orders, pets to spikes
+
 TODO:
+* Separate seeded random for orders for consistency / high scores
 * Potion order requirements are a bit high too quickly? Especially Pure of 16!
   * 10 of each (5 turns minimum) is probably a more reasonable max
 * High scores
+* Daily summary if things go wrong - especially if pets are starving - Modal confirm first
+* Show picked up potion and/or pet under mouse
+  * Highlight all possible places it could go
 * Would be useful to see current stats of all potions (and pets) - roll over something and they all show up? Always there? Hold shift?
+* Really need to show (floaters?) what happens when brewing
 * New button and panel graphics
 * Allow selecting pet first, then food, show same tooltip
-* Daily summary if things go wrong
 
 Polish
+* Animate pipes rotating
+* Tutorial or more instruction
 * Sounds / Music
   * Sacrifice squish
   * Brew burble
@@ -29,8 +38,6 @@ Graphics
 * Animate pets
 * More pet variety and size variety - why?  Just make slimes better? and we're a Slime Slaughterer?
 * Gears or pattern in background of pipes board
-* Animate pipes rotating
-* Separate seeded random for orders for consistency / high scores
 
 Stretch
 * Pets grow in size after being fed?  Or their size is fixed?

@@ -821,6 +821,7 @@ export function main(canvas) {
         if (pipe.type === 'zig' || pipe.type === 'cross') {
           let replace = (pipe.type === 'zig') ? 'corner' : 'straight';
           sprites.pipes[replace].drawDualTint(param);
+          param.z += 0.01;
           param.rotation += (pipe.type === 'zig') ? PI : PI / 2;
           if (pipe.fill[1].uid) {
             param.color1 = fluid_colors[pipe.fill[1].type];
