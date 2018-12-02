@@ -11,12 +11,10 @@ TODO:
 * High scores
 * Would be useful to see current stats of all potions (and pets) - roll over something and they all show up? Always there? Hold shift?
 * Really need to show (floaters?) what happens when brewing
-* New button and panel graphics
-* Allow selecting pet first, then food, show same tooltip
 
 Polish
+* New button and panel graphics
 * Font styling
-* Animate pipes rotating
 * Tutorial or more instruction - Help button with flow-chart?
 * Sounds / Music
   * Sacrifice squish

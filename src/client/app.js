@@ -8,8 +8,8 @@ const particle_data = require('./particle_data.js');
 const random_seed = require('random-seed');
 
 const { v2Build, v3Add, v3Build, v3BuildZero, v3Max, v3Min, v3Sub, v4Build } = VMath;
-const { ceil, min, max, PI } = Math;
-const { defaults, merge, clone, titleCase } = require('../common/util.js');
+const { abs, ceil, min, max, PI } = Math;
+const { defaults, merge, clone, titleCase, lerp, easeInOut } = require('../common/util.js');
 
 let DEBUG = String(document.location).indexOf('localhost') !== -1;
 
@@ -44,6 +44,7 @@ const PET_SIZE = sprite_size;
 const MULLIGAN_MAX = 3;
 const POTENCY_MAX = 16;
 const ORDERS_FINAL = 10;
+const ROT_TIME = 500;
 
 const potency_to_increase = [
   0,
@@ -202,6 +203,8 @@ export function main(canvas) {
     return {
       type: PIPE_DIST[rand(PIPE_DIST.length)],
       rot: rand(4),
+      last_rot: null,
+      last_rot_timer: null,
       fill: [{}, {}],
     };
   }
@@ -814,7 +817,7 @@ export function main(canvas) {
 
   function drawPipes(dt) {
     let rotateable = true;
-    let { board, sources } = game_state;
+    let { board } = game_state;
     let x0 = 1440;
     let y0 = 160;
 
@@ -822,6 +825,27 @@ export function main(canvas) {
       let row = board[ii];
       for (let jj = 0; jj < row.length; ++jj) {
         let pipe = row[jj];
+        let rotation = PI * 2 * pipe.rot / 4;
+        let rotating = false;
+        if (pipe.last_rot !== null) {
+          pipe.last_rot_timer += dt;
+          if (pipe.last_rot_timer > ROT_TIME) {
+            pipe.last_rot_timer = 0;
+            pipe.last_rot = null;
+          } else {
+            rotating = true;
+            let last_rot = PI * 2 * pipe.last_rot / 4;
+            let interp = easeInOut(pipe.last_rot_timer / ROT_TIME, 2);
+            if (abs(rotation - last_rot) > PI) {
+              if (last_rot > rotation) {
+                last_rot -= PI * 2;
+              } else {
+                last_rot += PI * 2;
+              }
+            }
+            rotation = lerp(interp, last_rot, rotation);
+          }
+        }
         let param = {
           x: x0 + sprite_size * jj,
           y: y0 + sprite_size * ii,
@@ -831,9 +855,9 @@ export function main(canvas) {
           color: color_higlight,
           color1: color_pipe,
           size: [1, 1],
-          rotation: PI * 2 * pipe.rot / 4,
+          rotation,
         };
-        if (rotateable && pipe.type !== 'merge') {
+        if (rotateable/* && pipe.type !== 'merge'*/) {
           let { ret, state } = glov_ui.buttonShared(param);
           if (!ret) {
             param.button = 1;
@@ -841,6 +865,8 @@ export function main(canvas) {
           }
 
           if (ret) {
+            pipe.last_rot = pipe.rot;
+            pipe.last_rot_timer = 0;
             pipe.rot = (pipe.rot + (param.button ? 3 : 1)) % 4;
           }
           if (state === 'rollover') {
@@ -852,7 +878,7 @@ export function main(canvas) {
         }
         param.x += sprite_size / 2;
         param.y += sprite_size / 2;
-        if (pipe.fill[0].uid) {
+        if (pipe.fill[0].uid && !rotating) {
           param.color1 = fluid_colors[pipe.fill[0].type];
           param.color = fluid_colors_glow[pipe.fill[0].type];
         }
@@ -861,7 +887,7 @@ export function main(canvas) {
           sprites.pipes[replace].drawDualTint(param);
           param.z += 0.01;
           param.rotation += (pipe.type === 'zig') ? PI : PI / 2;
-          if (pipe.fill[1].uid) {
+          if (pipe.fill[1].uid && !rotating) {
             param.color1 = fluid_colors[pipe.fill[1].type];
             param.color = fluid_colors_glow[pipe.fill[1].type];
           } else {
@@ -1104,7 +1130,7 @@ export function main(canvas) {
     return ret;
   }
 
-  function drawPipesUI(dt) {
+  function drawButtons(dt) {
     let w = 310;
     if (game_state.selected) {
       if (game_state.selected[0] === 'potion') {
@@ -1773,7 +1799,7 @@ export function main(canvas) {
     drawBeakers(dt);
     drawPen(dt);
 
-    drawPipesUI(dt);
+    drawButtons(dt);
     drawStatus(dt);
     drawOrders(dt);
 
