@@ -170,12 +170,20 @@ export function main(canvas) {
   const createSpriteSimple = glov_sprite.createSpriteSimple.bind(glov_sprite);
   const createAnimation = glov_sprite.createAnimation.bind(glov_sprite);
 
-  const color_white = v4Build(1, 1, 1, 1);
-  const color_red = v4Build(1, 0, 0, 1);
-  const color_yellow = v4Build(1, 1, 0, 1);
-
   const color_higlight = v4Build(0.898, 0.898, 0.898, 1);
   const color_pipe = v4Build(0.326, 0.380, 0.431, 1);
+
+  let font_style_header = glov_font.style(null, {
+    color: 0xe5e5e5ff,
+    outline_width: 3,
+    outline_color: 0x000000B0,
+    glow_xoffs: 0,
+    glow_yoffs: 0,
+    glow_inner: 0,
+    glow_outer: 0,
+    glow_color: 0x000000ff,
+  });
+
 
   const fluid_colors = [
     v4Build(0.820, 0.247, 0.541, 1),
@@ -1185,7 +1193,7 @@ export function main(canvas) {
     let x = 1440 + 80;
     let w = 960 - 80 * 2;
     let y = 1360 + 90;
-    let style = null;
+    let style = font_style_header;
 
     if (game_state.selected) {
       y -= 20;
@@ -1609,12 +1617,13 @@ export function main(canvas) {
   const ORDERS_PAD = 12;
   const ORDERS_Y0 = 1300;
   const ORDERS_H = 280;
+
   function drawOrders(dt) {
     let { orders } = game_state;
 
     const font_size = 48;
     let y = ORDERS_Y0;
-    font.drawSizedAligned(null, ORDERS_X0, y, Z.UI, font_size, glov_font.ALIGN.HCENTER, ORDERS_W, 0,
+    font.drawSizedAligned(font_style_header, ORDERS_X0, y, Z.UI, font_size, glov_font.ALIGN.HCENTER, ORDERS_W, 0,
       'Current Orders (Reward: 2 GP each)');
     y += font_size + 4;
 

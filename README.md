@@ -12,7 +12,6 @@ TODO:
 * Really need to show (floaters?) what happens when brewing
 
 Polish
-* Font styling
 * Tutorial or more instruction - Help button with flow-chart?
 * Sounds / Music
   * Sacrifice squish
