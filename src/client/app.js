@@ -97,7 +97,7 @@ export function main(canvas) {
   });
 
   const sound_manager = glov_engine.sound_manager;
-  // const glov_camera = glov_engine.glov_camera;
+  const glov_camera = glov_engine.glov_camera;
   const glov_input = glov_engine.glov_input;
   const glov_sprite = glov_engine.glov_sprite;
   const glov_ui = glov_engine.glov_ui;
@@ -174,7 +174,7 @@ export function main(canvas) {
   function newSink() {
     return {
       value: v3Build(0, 0, 0),
-      offset: rand.random() * 16,
+      offset: Math.random() * 16, // visual random, do not use seed
     };
   }
 
@@ -436,6 +436,12 @@ export function main(canvas) {
         height: sprite_size,
         origin: origin_0_0.origin,
       });
+      sprites.pets[`${species}_hungry`] = createSpriteSimple(`pet_${species}_hungry`, sprite_size, sprite_size, {
+        layers: 2,
+        width: sprite_size,
+        height: sprite_size,
+        origin: origin_0_0.origin,
+      });
     });
     const params_beaker = defaults({
       height: sprite_size * 1.5,
@@ -456,6 +462,13 @@ export function main(canvas) {
       });
     }
 
+    sprites.icons = createSpriteSimple('icons', [128, 128], [128, 128], {
+      layers: 1,
+      width: 1,
+      height: 1,
+      origin: origin_0_0.origin,
+    });
+
     sprites.meat = createSpriteSimple('meat', sprite_size, sprite_size, params_square);
 
     sprites.game_bg = createSpriteSimple('bg.png', 2560, 1600, {
@@ -463,6 +476,10 @@ export function main(canvas) {
       height: game_height,
       origin: [0, 0],
     });
+  }
+
+  function muchGreater(a, b) {
+    return a - b >= 3 || a > b * 2;
   }
 
   function beakerType(value, max_size) {
@@ -473,27 +490,15 @@ export function main(canvas) {
     if (!value[sort[0]]) {
       return -1;
     }
-    if (max_size === 1 || !value[sort[1]] || value[sort[0]] - value[sort[1]] >= 3) {
+    if (max_size === 1 || !value[sort[1]] || muchGreater(value[sort[0]], value[sort[1]])) {
       return sort[0];
     }
-    if (max_size === 2 || !value[sort[2]] || value[sort[1]] - value[sort[2]] >= 3) {
+    if (max_size === 2 || !value[sort[2]] || muchGreater(value[sort[1]], value[sort[2]])) {
       return typeMix(sort[0], sort[1]);
     }
     return 7;
   }
 
-
-
-  const unmix = [
-    [0, 0],
-    [1, 1],
-    [2, 2],
-    [0, 1],
-    [1, 2],
-    [2, 0],
-    null,
-    null,
-  ];
 
   function meatFromPetInternal(pet) {
     let value = pet.value;
@@ -617,14 +622,33 @@ export function main(canvas) {
         if (s.predict) {
           color = v4Build(color[0], color[1], color[2], 0.5);
         }
-        sprites.meat.drawDualTint({
+        let param = {
           x: x0 + sprite_size * ii + sprite_size / 2,
           y: y0 - sprite_size / 2,
           z: Z.SPRITES,
           color: color,
           color1: fluid_colors_glow[s.type],
           size: [1, 1],
-        });
+        };
+        sprites.meat.drawDualTint(param);
+        let text_color = 0x00000040;
+        if (glov_input.isMouseOver({
+          x: param.x - sprite_size / 2,
+          y: param.y - sprite_size / 2,
+          w: sprite_size,
+          h: sprite_size,
+        })) {
+          text_color = 0x000000A0;
+          glov_ui.drawTooltip({
+            x: param.x - sprite_size,
+            y: param.y + sprite_size / 2,
+            tooltip: `These ingredients can be used in ${s.count} more brew${s.count === 1 ? '' : 's'}` +
+              ' (any number of potions per brew)',
+          });
+        }
+        font.drawSizedAligned(glov_font.styleColored(null, text_color),
+          param.x, param.y + 30, param.z + 1, 48, glov_font.ALIGN.HVCENTER, 0, 0,
+          `${s.count}`);
       }
     }
   }
@@ -693,6 +717,7 @@ export function main(canvas) {
   }
 
   function drawBeakers(dt) {
+    let brew = calcBrew();
     let x0 = 1440;
     let y0 = 1120;
     for (let ii = 0; ii < PIPE_DIM; ++ii) {
@@ -706,12 +731,18 @@ export function main(canvas) {
         w: sprite_size, // mouse
         h: sprite_size * 1.5,
       };
+
+      let over = false;
       if (type < 0) {
+        if (brew[ii] && glov_input.isMouseOver(param)) {
+          over = true;
+        }
+
         sprites.beaker_empty.draw(param);
       } else {
         let selected = 0;
         if (glov_input.clickHit(param)) {
-          glov_ui.setMouseOver(b);
+          over = true;
           glov_ui.playUISound('select');
           game_state.selected = ['potion', ii];
           selected = 1;
@@ -719,11 +750,12 @@ export function main(canvas) {
           selected = 0.75;
         }
         if (glov_input.isMouseOver(param)) {
-          glov_ui.setMouseOver(b);
+          over = true;
           if (!selected) {
             selected = 0.5;
           }
         }
+
         param.color = fluid_colors[type];
         param.color1 = fluid_colors_glow[type];
         sprites.beaker_full.drawDualTint(param);
@@ -732,6 +764,45 @@ export function main(canvas) {
           param.z--;
           sprites.beaker_select.draw(param);
         }
+      }
+
+      if (over) {
+        glov_ui.setMouseOver(b);
+        let tooltip_w = 400;
+        let pad = 16;
+        let tooltip_x = param.x + (sprite_size - tooltip_w) / 2;
+        let tooltip_y0 = y0 + sprite_size * 1.2;
+        let tooltip_y = tooltip_y0 + pad;
+        let z = Z.TOOLTIP;
+        let font_size = 48;
+        let style = glov_font.styleColored(null, 0x000000ff);
+        font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER, tooltip_w, 0,
+          'Potion Potency');
+        tooltip_y += font_size;
+        let output = brew[ii] ? output_from_type[brew[ii].type] : [0,0,0];
+        for (let jj = 0; jj < 3; ++jj) {
+          if (b.value[jj] || output[jj]) {
+            let font_w = font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER,
+              tooltip_w, 0, `  = ${b.value[jj]}${output[jj] ? ` ${output[jj] > 0 ? '(+' : '('}${output[jj]})` : ''}`);
+            let icon_size = font_size;
+            sprites.icons.draw({
+              x: tooltip_x + (tooltip_w - font_w + font_size) / 2 - icon_size,
+              y: tooltip_y,
+              z: z + 1,
+              size: [icon_size, icon_size],
+              frame: jj,
+            });
+            tooltip_y += font_size;
+          }
+        }
+
+        glov_ui.panel({
+          x: tooltip_x,
+          y: tooltip_y0,
+          z: Z.TOOLTIP - 1,
+          w: tooltip_w,
+          h: tooltip_y + pad - tooltip_y0,
+        });
       }
     }
   }
@@ -756,8 +827,9 @@ export function main(canvas) {
         if (glov_ui.buttonText({
           x: 1440 + (2400 - 1440 - w) / 2,
           y: 1360,
-          text: 'Empty Beaker',
+          text: 'Empty Potion',
           w,
+          tooltip: 'Empty the currently selected potion, gaining nothing.  Why would you do this?',
         })) {
           game_state.sinks[game_state.selected[1]] = newSink();
         }
@@ -768,6 +840,9 @@ export function main(canvas) {
         y: 1360,
         text: 'Brew!',
         w,
+        tooltip: 'Advances time.  Consume 1 of any ingredient used in any potion, and add to the' +
+          ' potions.  Also, any unfed animals will lose 1 of each stat.',
+        tooltip_width: 1200,
       })) {
         doBrew();
         nextDay();
@@ -778,6 +853,9 @@ export function main(canvas) {
         text: `New Pipes (${game_state.mulligan})`,
         w,
         disabled: !game_state.mulligan,
+        tooltip: `Generate a new layout of pipes in your alchemical workshop.  You can do this ${game_state.mulligan}` +
+          ' times, and once more every Brew.',
+        tooltip_width: 1200,
       })) {
         --game_state.mulligan;
         newPipes();
@@ -786,7 +864,8 @@ export function main(canvas) {
         x: 2400 - w,
         y: 1360,
         text: 'Shop',
-        w
+        w,
+        tooltip: 'TODO!',
       });
     }
   }
@@ -822,12 +901,14 @@ export function main(canvas) {
         w: sprite_size * pet.size, // mouse
         h: sprite_size, // mouse
       };
-      sprites.pets[pet.species].drawDualTint(param);
+      sprites.pets[`${pet.species}${pet.fed ? '' : '_hungry'}`].drawDualTint(param);
 
       let selected = 0;
+      let over = false;
       let selectable = sink_selected && !pet.fed || !game_state.selected && meatFromPet(pet).length;
       if (selectable && glov_input.clickHit(param)) {
         glov_ui.playUISound('select');
+        over = true;
         selected = 1;
         if (sink_selected) {
           // Feed them!
@@ -853,9 +934,9 @@ export function main(canvas) {
           need_sort = true;
         }
       }
-      if (selectable && glov_input.isMouseOver(param)) {
-        glov_ui.setMouseOver(pet);
-        if (!selected) {
+      if (glov_input.isMouseOver(param)) {
+        over = true;
+        if (selectable && !selected) {
           selected = 0.5;
         }
       }
@@ -863,6 +944,72 @@ export function main(canvas) {
         param.color = v4Build(1, 1, 1, selected);
         param.z -= 0.5;
         sprites.pet_select[pet.size].draw(param);
+      }
+
+      if (over) {
+        glov_ui.setMouseOver(pet);
+        let tooltip_w = 400;
+        let pad = 16;
+        let tooltip_x = param.x + (sprite_size * pet.size - tooltip_w) / 2;
+        if (tooltip_x < glov_camera.x0()) {
+          tooltip_x = glov_camera.x0();
+        }
+        let tooltip_y0 = param.y + sprite_size;
+        let tooltip_y = tooltip_y0 + pad;
+        let z = Z.TOOLTIP;
+        let font_size = 48;
+        let style = glov_font.styleColored(null, 0x000000ff);
+        font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER, tooltip_w, 0,
+          pet.species.toUpperCase());
+        tooltip_y += font_size;
+        let output = pet.fed ? [0,0,0] : [-1, -1, -1];
+        // if a potion is selected, use that here
+        let sel_pot = game_state.selected && game_state.selected[0] === 'potion';
+        if (sel_pot && !pet.fed) {
+          let sink = game_state.sinks[game_state.selected[1]];
+          for (let jj = 0; jj < 3; ++jj) {
+            output[jj] = potency_to_increase[sink.value[jj]];
+          }
+        }
+        for (let jj = 0; jj < 3; ++jj) {
+          if (pet.value[jj] || output[jj]) {
+            let font_w = font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER,
+              tooltip_w, 0, `  = ${pet.value[jj]}${output[jj] ? ` ${output[jj] > 0 ? '(+' : '('}${output[jj]})` : ''}`);
+            let icon_size = font_size;
+            sprites.icons.draw({
+              x: tooltip_x + (tooltip_w - font_w + font_size) / 2 - icon_size,
+              y: tooltip_y,
+              z: z + 1,
+              size: [icon_size, icon_size],
+              frame: jj,
+            });
+            tooltip_y += font_size;
+          }
+        }
+        if (sel_pot && pet.fed) {
+          font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER, tooltip_w, 0,
+            'Satiated.');
+          tooltip_y += font_size;
+          font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER, tooltip_w, 0,
+            'Cannot feed.');
+          tooltip_y += font_size;
+        } else if (sel_pot) {
+          font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER, tooltip_w, 0,
+            'Click to feed.');
+          tooltip_y += font_size;
+        } else if (!pet.fed) {
+          font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER, tooltip_w, 0,
+            'Hungry!');
+          tooltip_y += font_size;
+        }
+
+        glov_ui.panel({
+          x: tooltip_x,
+          y: tooltip_y0,
+          z: Z.TOOLTIP - 1,
+          w: tooltip_w,
+          h: tooltip_y + pad - tooltip_y0,
+        });
       }
     }
     if (need_sort) {
@@ -908,6 +1055,15 @@ export function main(canvas) {
     return true;
   }
 
+  function randomOrderProtected() {
+    let order = randomOrder();
+    for (let ii = 0; ii < game_state.orders.length; ++ii) {
+      if (JSON.stringify(game_state.orders[ii]) === JSON.stringify(order)) {
+        return randomOrder();
+      }
+    }
+    return randomOrder();
+  }
   function fulfillOrder(order_idx) {
     let order = game_state.orders[order_idx];
     let is_pet = order.type === 'pet';
@@ -919,9 +1075,9 @@ export function main(canvas) {
     game_state.selected = null;
     // TODO: reward
     game_state.orders_done++;
-    game_state.orders.splice(order_idx, 1, randomOrder());
+    game_state.orders.splice(order_idx, 1, randomOrderProtected());
     while (game_state.orders.length < min(3, game_state.orders_done + 1)) {
-      game_state.orders.push(randomOrder());
+      game_state.orders.push(randomOrderProtected());
     }
   }
 
@@ -959,7 +1115,7 @@ export function main(canvas) {
             fulfillOrder(ii);
           }
           if (state === 'rollover') {
-            param.color = color_white;
+            param.color = v4Build(0.75, 1, 0.75, 1);
           } else {
             param.color = v4Build(0.5, 1, 0.5, 1);
           }
@@ -974,29 +1130,51 @@ export function main(canvas) {
         x, y, Z.UI, font_size, glov_font.ALIGN.HCENTER, w, 0,
         order.name);
       y += font_size;
+      let all_same = true;
+      for (let jj = 1; jj < 3; ++jj) {
+        if (order.min && order.min[0] !== order.min[jj]) {
+          all_same = false;
+        }
+        if (order.max && order.max[0] !== order.max[jj]) {
+          all_same = false;
+        }
+      }
       for (let jj = 0; jj < 3; ++jj) {
         let rule = null;
         if (order.min && order.max && order.min[jj] !== null && order.max[jj] !== null) {
           if (order.min[jj] === order.max[jj]) {
-            rule = `=${order.min[jj]}`;
+            rule = `= ${order.min[jj]}`;
           } else {
-            rule = `${order.min[jj]}-${order.max[jj]}`;
+            rule = `= ${order.min[jj]}-${order.max[jj]}`;
           }
         } else if (order.min && order.min[jj] !== null) {
-          rule = `${order.min[jj]}+`;
+          rule = `= ${order.min[jj]}+`; // Use ≥ ?  Not in font.
         } else if (order.max && order.max[jj] !== null) {
           if (order.max[jj]) {
-            rule = `${order.max[jj]}-`;
+            rule = `< ${order.max[jj] + 1}`;
           } else {
-            rule = '=0';
+            rule = '= 0';
           }
         }
         if (rule) {
-          font.drawSizedAligned(
+          let font_w = font.drawSizedAligned(
             glov_font.styleColored(null, 0x000000ff),
             x, y, Z.UI, font_size, glov_font.ALIGN.HCENTER, w, 0,
-            `Stat${jj}: ${rule}`);
+            `${all_same ? 'All' : '  '} ${rule}`);
+          if (!all_same) {
+            let icon_size = font_size;
+            sprites.icons.draw({
+              x: x + (w - font_w + font_size) / 2 - icon_size,
+              y: y,
+              z: Z.UI + 1,
+              size: [icon_size, icon_size],
+              frame: jj,
+            });
+          }
           y += font_size;
+        }
+        if (all_same) {
+          break;
         }
       }
       if (order.color) {
