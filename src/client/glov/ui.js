@@ -461,10 +461,10 @@ class GlovUI {
         text: key
       }) || pressed
       ) {
+        this.modal_dialog = null;
         if (modal_dialog.buttons[key]) {
           modal_dialog.buttons[key]();
         }
-        this.modal_dialog = null;
       }
       x += pad + button_width;
     }

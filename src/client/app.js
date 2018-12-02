@@ -472,6 +472,8 @@ export function main(canvas) {
     if (DEBUG) {
       game_state.warned.no_brew = true;
       game_state.warned.hungry = true;
+      game_state.warned.always_hungry = true;
+      game_state.warned.always_brew = true;
     }
   }
 
@@ -962,6 +964,7 @@ export function main(canvas) {
   }
 
   function nextDay() {
+    doBrew();
     let { pen } = game_state;
     for (let ii = 0; ii < pen.length; ++ii) {
       let pet = pen[ii];
@@ -1097,7 +1100,7 @@ export function main(canvas) {
             title: 'Should Not Brew',
             text: 'No output (tutorial warning)\n\nBefore Brewing, you must click' +
               ' on the pipes to rotate them to direct the flow to the bottom, in order to brew potions.\n\n' +
-              'This warning will not be shown again.  Click Brew again when ready.',
+              'This warning will not be shown again. Click Brew again when ready.',
             buttons: {
               'OK': null,
             }
@@ -1110,14 +1113,48 @@ export function main(canvas) {
               ' one of each stat when you next Brew!\n\nYou should consider feeding hungry pets' +
               ' potions, or tapping them for ingredients rather than wasting their strength.\n\n' +
               'Note: sometimes it may be strategic to let a pet starve.\n\n' +
-              'This warning will not be shown again.  Click Brew again when ready.',
+              'This warning will not be shown again. Click Brew again when ready.',
             buttons: {
               'OK': null,
             }
           });
         } else {
-          doBrew();
-          nextDay();
+          let brew2 = () => {
+            if (no_brew && !game_state.warned.always_brew) {
+              glov_ui.modalDialog({
+                title: 'Should Not Brew',
+                text: 'You are not adding to any potions.\n\n' +
+                  'Continue anyways?',
+                buttons: {
+                  'Yes': nextDay,
+                  'Always': () => {
+                    game_state.warned.always_brew = true;
+                    nextDay();
+                  },
+                  'No': null,
+                }
+              });
+            } else {
+              nextDay();
+            }
+          };
+          if (hungry && !game_state.warned.always_hungry) {
+            glov_ui.modalDialog({
+              title: 'Starving Pets',
+              text: 'Some pets are starving and will lose 1 of each stat if you continue without feeding them.\n\n' +
+                'Continue anyways?',
+              buttons: {
+                'Yes': brew2,
+                'Always': () => {
+                  game_state.warned.always_hungry = true;
+                  brew2();
+                },
+                'No': null,
+              }
+            });
+          } else {
+            brew2();
+          }
         }
       } else {
         if (glov_ui.button_mouseover) {
@@ -1382,7 +1419,7 @@ export function main(canvas) {
         glov_ui.modalDialog({
           title: 'You win!',
           text: 'Congratulations, you have brewed the ultimate potion, Ambrosia, and fulfilled all other orders.' +
-            ' Consider yourself a hero.  Click OK to continue in Endless Mode, if you really want to.',
+            ' Consider yourself a hero. Click OK to continue in Endless Mode, if you really want to.',
           buttons: {
             'OK': function () {
               game_state.endless = true;

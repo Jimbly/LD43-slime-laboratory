@@ -11,7 +11,6 @@ Notes:
 * Didn't realize could drag from beakers to pets, pets to orders, pets to spikes
 
 TODO:
-* Daily summary if things go wrong - especially if pets are starving - Modal confirm first
 * High scores
 * Show picked up potion and/or pet under mouse
   * Highlight all possible places it could go
