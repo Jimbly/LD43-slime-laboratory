@@ -8,11 +8,20 @@ LD43 Entry by Jimbly
 Start with: `npm start` (after running `npm i` once)
 
 TODO:
+* Show current values (on mouse over and when selected)
+  * Show resulting values when mousing over feeding a pet
+  * Show "fed" state
+
+* New button and panel graphics
+* Allow selecting pet first, then food, show same tooltip
+* Daily summary if things go wrong
+* Shadows under pets
 * Animate pets
 * More pet variety and size variety
 * Pets wander when mouse not near them
 * How many count taps for source values - maybe should be divided by 2, as one tap can fill all 6 bottles sometimes!
-
+* Gears or pattern in background of pipes board
+* Animate pipes rotating
 
 Alchemical Menagerie
 * Art

@@ -390,7 +390,8 @@ class GlovUI {
     assert(typeof param.w === 'number');
     assert(typeof param.h === 'number');
     param.z = param.z || (Z.UI - 1);
-    this.drawBox(param, this.sprites.panel, this.panel_pixel_scale, this.color_panel);
+    let color = param.color || this.color_panel;
+    this.drawBox(param, this.sprites.panel, this.panel_pixel_scale, color);
     glov_input.clickHit(param);
     glov_input.isMouseOver(param);
   }
@@ -727,7 +728,7 @@ class GlovUI {
     this.modal_y0 *= scale;
     this.modal_title_scale *= scale;
     this.pad *= scale;
-    this.panel_pixel_scale *= this.button_width / 13; // button_height / button pixel resolution
+    this.panel_pixel_scale = this.button_height / 13; // button_height / button pixel resolution
   }
 }
 

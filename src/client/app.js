@@ -8,8 +8,10 @@ const particle_data = require('./particle_data.js');
 const random_seed = require('random-seed');
 
 const { v2Build, v3Add, v3Build, v3BuildZero, v3Max, v3Min, v3Sub, v4Build } = VMath;
-const { min, max, PI } = Math;
+const { ceil, min, max, PI } = Math;
 const { defaults, merge, clone } = require('../common/util.js');
+
+let DEBUG = String(document.location).indexOf('localhost') !== -1;
 
 local_storage.storage_prefix = 'glovjs-playground';
 window.Z = window.Z || {};
@@ -38,7 +40,27 @@ const PEN_H = 944;
 const sprite_size = 160;
 const PET_SIZE = sprite_size;
 const MULLIGAN_MAX = 3;
-const POTENCY_MAX = 10;
+const POTENCY_MAX = 16;
+
+const potency_to_increase = [
+  0,
+  1,
+  2,
+  2,
+  3,
+  3,
+  3,
+  3,
+  4,
+  4,
+  4,
+  4,
+  4,
+  4,
+  4,
+  4,
+  5,
+];
 
 const connectivity = {
   'corner': [[TOP, RIGHT]],
@@ -80,7 +102,7 @@ export function main(canvas) {
   const glov_sprite = glov_engine.glov_sprite;
   const glov_ui = glov_engine.glov_ui;
   const draw_list = glov_engine.draw_list;
-  // const font = glov_engine.font;
+  const font = glov_engine.font;
 
   glov_ui.scaleSizes(2560 / 1280);
 
@@ -164,6 +186,98 @@ export function main(canvas) {
       arr[idx] = t;
     }
   }
+
+  function randomOrder() {
+    let difficulty = game_state.orders_done + 1;
+    let options = [
+      {
+        type: 'potion',
+        name: 'Pure Potion',
+        min: [3 + difficulty * 2, null, null],
+        max: [null, 0, 0],
+      }, {
+        type: 'potion',
+        name: 'Golden Potion',
+        min: [difficulty / 2, difficulty / 2, difficulty / 2],
+        color: 7,
+      }, {
+        type: 'potion',
+        name: 'Potion',
+        min: [2 + difficulty * 1.5, null, null],
+      }, {
+        type: 'potion',
+        name: 'Potion',
+        min: [difficulty * 2, difficulty / 2, 0],
+      }, {
+        type: 'pet',
+        name: 'Golden Pet',
+        min: [difficulty / 2, difficulty / 2, difficulty / 2],
+        color: 7,
+      }, {
+        type: 'pet',
+        name: 'Specialized Pet',
+        min: [2 + difficulty, null, null],
+        max: [null, difficulty / 3, difficulty / 3],
+      }, {
+        type: 'pet',
+        name: 'Pet',
+        min: [difficulty, difficulty / 2, null],
+      }, {
+        type: 'pet',
+        name: 'Strong Pet',
+        color: 0,
+        min: [2 + difficulty, null, null],
+        no_random: true,
+      }, {
+        type: 'pet',
+        name: 'Beautiful Pet',
+        color: 0,
+        min: [null, 2 + difficulty, null],
+        no_random: true,
+      }, {
+        type: 'pet',
+        name: 'Magic Pet',
+        color: 0,
+        min: [null, null, 2 + difficulty],
+        no_random: true,
+      }
+    ];
+    let order = options[rand(options.length)];
+    if (difficulty === 10) {
+      order = {
+        type: 'potion',
+        name: 'Ambrosia',
+        min: [POTENCY_MAX, POTENCY_MAX, POTENCY_MAX],
+        max: [POTENCY_MAX, POTENCY_MAX, POTENCY_MAX],
+      };
+    }
+    let permute = [0, 1, 2];
+    randomizeArray(permute);
+    ['min', 'max'].forEach((field) => {
+      if (order[field]) {
+        // Swap order of all array parameters
+        if (!order.no_random) {
+          order[field] = order[field].map((v, idx) => order[field][permute[idx]]);
+        }
+        // Ceil all float values
+        order[field] = order[field].map((v) => {
+          if (v === null) {
+            return null;
+          }
+          return ceil(v);
+        });
+      }
+    });
+    if (order.min) {
+      for (let ii = 0; ii < 3; ++ii) {
+        if (order.min[ii] !== null) {
+          order.min[ii] = min(POTENCY_MAX, order.min[ii]);
+        }
+      }
+    }
+    return order;
+  }
+
   function newGame() {
     rand = random_seed.create(3);
     game_state = {
@@ -173,7 +287,10 @@ export function main(canvas) {
       sinks: [],
       mulligan: 2,
       pen: [],
+      orders: [],
+      orders_done: 0,
     };
+    game_state.orders.push(randomOrder());
     newPipes();
     let counts = [1, 2, 3];
     randomizeArray(counts);
@@ -196,7 +313,7 @@ export function main(canvas) {
     for (let ii = 0; ii < 3; ++ii) {
       let size = sizes[ii];
       let value = v3BuildZero();
-      value[types[ii]] = 1;
+      value[types[ii]] = DEBUG ? 3 : 1;
       let order = [0,1,2,6];
       randomizeArray(order);
       let pet = {
@@ -255,6 +372,14 @@ export function main(canvas) {
 
   function doBrew() {
     let { sources, sinks } = game_state;
+
+    // clear any old sources
+    for (let ii = 0; ii < sources.length; ++ii) {
+      if (sources[ii] && !sources[ii].count) {
+        sources[ii] = null;
+      }
+    }
+
     let brew = calcBrew();
     let used = {};
     for (let ii = 0; ii < sinks.length; ++ii) {
@@ -275,6 +400,10 @@ export function main(canvas) {
           s.type = 6;
         }
       }
+    }
+
+    if (!DEBUG) {
+      newPipes();
     }
   }
 
@@ -458,6 +587,7 @@ export function main(canvas) {
               sources[idx].type = meat[jj].type;
             }
             game_state.pen.splice(selected[1], 1);
+            game_state.selected = null;
             break;
           } else if (glov_input.isMouseOver(param)) {
             glov_ui.setMouseOver(`source_${ii}`);
@@ -583,9 +713,9 @@ export function main(canvas) {
         if (glov_input.clickHit(param)) {
           glov_ui.setMouseOver(b);
           glov_ui.playUISound('select');
-          game_state.selected = ['sink', ii];
+          game_state.selected = ['potion', ii];
           selected = 1;
-        } else if (game_state.selected && game_state.selected[0] === 'sink' && game_state.selected[1] === ii) {
+        } else if (game_state.selected && game_state.selected[0] === 'potion' && game_state.selected[1] === ii) {
           selected = 0.75;
         }
         if (glov_input.isMouseOver(param)) {
@@ -621,44 +751,61 @@ export function main(canvas) {
 
   function drawPipesUI(dt) {
     let w = 310;
-    if (glov_ui.buttonText({
-      x: 1440,
-      y: 1360,
-      text: 'Brew!',
-      w,
-    })) {
-      doBrew();
-      nextDay();
+    if (game_state.selected) {
+      if (game_state.selected[0] === 'potion') {
+        if (glov_ui.buttonText({
+          x: 1440 + (2400 - 1440 - w) / 2,
+          y: 1360,
+          text: 'Empty Beaker',
+          w,
+        })) {
+          game_state.sinks[game_state.selected[1]] = newSink();
+        }
+      }
+    } else {
+      if (glov_ui.buttonText({
+        x: 1440,
+        y: 1360,
+        text: 'Brew!',
+        w,
+      })) {
+        doBrew();
+        nextDay();
+      }
+      if (glov_ui.buttonText({
+        x: 1440 + (2400 - 1440 - w) / 2,
+        y: 1360,
+        text: `New Pipes (${game_state.mulligan})`,
+        w,
+        disabled: !game_state.mulligan,
+      })) {
+        --game_state.mulligan;
+        newPipes();
+      }
+      glov_ui.buttonText({
+        x: 2400 - w,
+        y: 1360,
+        text: 'Shop',
+        w
+      });
     }
-    if (glov_ui.buttonText({
-      x: 1440 + (2400 - 1440 - w) / 2,
-      y: 1360,
-      text: `New Pipes (${game_state.mulligan})`,
-      w,
-      disabled: !game_state.mulligan,
-    })) {
-      --game_state.mulligan;
-      newPipes();
-    }
-    glov_ui.buttonText({
-      x: 2400 - w,
-      y: 1360,
-      text: 'Shop',
-      w
-    });
   }
 
   function feedPet(pet_idx, sink_idx) {
     let pet = game_state.pen[pet_idx];
     let sink = game_state.sinks[sink_idx];
     assert(pet);
-    v3Add(pet.value, sink.value, pet.value);
+    for (let ii = 0; ii < 3; ++ii) {
+      pet.value[ii] += potency_to_increase[sink.value[ii]];
+    }
     game_state.sinks[sink_idx] = newSink();
+    pet.fed = true;
   }
 
   function drawPen(dt) {
     let { pen } = game_state;
-    let sink_selected = game_state.selected && game_state.selected[0] === 'sink';
+    let sink_selected = game_state.selected && game_state.selected[0] === 'potion';
+    let need_sort = false;
     for (let ii = 0; ii < pen.length; ++ii) {
       let pet = pen[ii];
       let type = beakerType(pet.value, pet.size);
@@ -668,7 +815,7 @@ export function main(canvas) {
       let param = {
         x: pet.pos[0],
         y: pet.pos[1],
-        z: Z.SPRITES,
+        z: Z.SPRITES + pen.length - ii,
         color: fluid_colors[type],
         color1: fluid_colors_glow[type],
         size: [pet.size, 1], // drawing
@@ -678,18 +825,33 @@ export function main(canvas) {
       sprites.pets[pet.species].drawDualTint(param);
 
       let selected = 0;
-      let selectable = sink_selected || meatFromPet(pet).length;
+      let selectable = sink_selected && !pet.fed || !game_state.selected && meatFromPet(pet).length;
       if (selectable && glov_input.clickHit(param)) {
         glov_ui.playUISound('select');
         selected = 1;
         if (sink_selected) {
           // Feed them!
           feedPet(ii, game_state.selected[1]);
+          game_state.selected = null;
         } else {
           game_state.selected = ['pet', ii];
         }
       } else if (game_state.selected && game_state.selected[0] === 'pet' && game_state.selected[1] === ii) {
         selected = 0.75;
+        let pen_param = {
+          x: PEN_X0,
+          y: PEN_Y0,
+          w: PEN_W,
+          h: PEN_H
+        };
+        let mpos;
+        if ((mpos = glov_input.clickHit(pen_param))) {
+          game_state.selected = null;
+          pet.pos[0] = min(max(PEN_X0, mpos[0] - pet.size * sprite_size / 2),
+            PEN_X0 + PEN_W - pet.size * sprite_size);
+          pet.pos[1] = min(max(PEN_Y0, mpos[1] - sprite_size / 2), PEN_Y0 + PEN_H - sprite_size);
+          need_sort = true;
+        }
       }
       if (selectable && glov_input.isMouseOver(param)) {
         glov_ui.setMouseOver(pet);
@@ -699,10 +861,150 @@ export function main(canvas) {
       }
       if (selected) {
         param.color = v4Build(1, 1, 1, selected);
-        param.z = Z.SPRITES - 1;
+        param.z -= 0.5;
         sprites.pet_select[pet.size].draw(param);
+      }
+    }
+    if (need_sort) {
+      pen.sort(function (a, b) {
+        let d = b.pos[1] - a.pos[1];
+        if (d) {
+          return d;
+        }
+        return a.pos[0] - b.pos[0];
+      });
+    }
+  }
 
-        // TODO: detect drag, or, click to select?
+  function selectedMeetsOrder(order) {
+    if (!game_state.selected) {
+      return false;
+    }
+    if (game_state.selected[0] !== order.type) {
+      return false;
+    }
+    let is_pet = order.type === 'pet';
+    let holder = is_pet ? 'pen' : 'sinks';
+    let thing = game_state[holder][game_state.selected[1]];
+    if (order.color !== undefined) {
+      if (order.color !== beakerType(thing.value, is_pet ? thing.size : 3)) {
+        return false;
+      }
+    }
+    if (order.min) {
+      for (let ii = 0; ii < 3; ++ii) {
+        if (order.min[ii] !== null && thing.value[ii] < order.min[ii]) {
+          return false;
+        }
+      }
+    }
+    if (order.max) {
+      for (let ii = 0; ii < 3; ++ii) {
+        if (order.max[ii] !== null && thing.value[ii] > order.max[ii]) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  function fulfillOrder(order_idx) {
+    let order = game_state.orders[order_idx];
+    let is_pet = order.type === 'pet';
+    if (is_pet) {
+      game_state.pen.splice(game_state.selected[1], 1);
+    } else {
+      game_state.sinks[game_state.selected[1]] = newSink();
+    }
+    game_state.selected = null;
+    // TODO: reward
+    game_state.orders_done++;
+    game_state.orders.splice(order_idx, 1, randomOrder());
+    while (game_state.orders.length < min(3, game_state.orders_done + 1)) {
+      game_state.orders.push(randomOrder());
+    }
+  }
+
+  const ORDERS_X0 = 80;
+  const ORDERS_W = 1120;
+  const ORDERS_PAD = 12;
+  const ORDERS_Y0 = 1300;
+  const ORDERS_H = 280;
+  function drawOrders(dt) {
+    let { orders } = game_state;
+
+    const font_size = 48;
+    let y = ORDERS_Y0;
+    font.drawSizedAligned(null, ORDERS_X0, y, Z.UI, font_size, glov_font.ALIGN.HCENTER, ORDERS_W, 0,
+      'Current Orders:');
+    y += font_size;
+
+    let y_save = y;
+    for (let ii = 0; ii < orders.length; ++ii) {
+      y = y_save;
+      let order = orders[ii];
+      let w = (ORDERS_W - ORDERS_PAD * 2) / 3;
+      let x = ORDERS_X0 + ii * (w + ORDERS_PAD);
+      if (orders.length === 1) {
+        x = ORDERS_X0 + (ORDERS_W - w) / 2;
+      } else if (orders.length === 2 && ii) {
+        x += w + ORDERS_PAD;
+      }
+      let h = ORDERS_Y0 + ORDERS_H - y;
+      let param = { x, y, w, h };
+      if (game_state.selected) {
+        if (selectedMeetsOrder(order)) {
+          let { ret, state } = glov_ui.buttonShared(param);
+          if (ret) {
+            fulfillOrder(ii);
+          }
+          if (state === 'rollover') {
+            param.color = color_white;
+          } else {
+            param.color = v4Build(0.5, 1, 0.5, 1);
+          }
+        } else {
+          param.color = v4Build(0.3, 0.3, 0.3, 1);
+        }
+      }
+      glov_ui.panel(param);
+      y += ORDERS_PAD;
+      font.drawSizedAligned(
+        glov_font.styleColored(null, 0x000000ff),
+        x, y, Z.UI, font_size, glov_font.ALIGN.HCENTER, w, 0,
+        order.name);
+      y += font_size;
+      for (let jj = 0; jj < 3; ++jj) {
+        let rule = null;
+        if (order.min && order.max && order.min[jj] !== null && order.max[jj] !== null) {
+          if (order.min[jj] === order.max[jj]) {
+            rule = `=${order.min[jj]}`;
+          } else {
+            rule = `${order.min[jj]}-${order.max[jj]}`;
+          }
+        } else if (order.min && order.min[jj] !== null) {
+          rule = `${order.min[jj]}+`;
+        } else if (order.max && order.max[jj] !== null) {
+          if (order.max[jj]) {
+            rule = `${order.max[jj]}-`;
+          } else {
+            rule = '=0';
+          }
+        }
+        if (rule) {
+          font.drawSizedAligned(
+            glov_font.styleColored(null, 0x000000ff),
+            x, y, Z.UI, font_size, glov_font.ALIGN.HCENTER, w, 0,
+            `Stat${jj}: ${rule}`);
+          y += font_size;
+        }
+      }
+      if (order.color) {
+        font.drawSizedAligned(
+          glov_font.styleColored(null, 0x000000ff),
+          x, y, Z.UI, font_size, glov_font.ALIGN.HCENTER, w, 0,
+          `Color: ${order.color}`);
+        y += font_size;
       }
     }
   }
@@ -794,6 +1096,7 @@ export function main(canvas) {
     drawPen(dt);
 
     drawPipesUI(dt);
+    drawOrders(dt);
 
     // sprites.test_tint.drawDualTint({
     //   x: test.character.x,
