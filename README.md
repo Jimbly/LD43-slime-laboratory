@@ -12,7 +12,6 @@ TODO:
 * Really need to show (floaters?) what happens when brewing
 
 Polish
-* New button and panel graphics
 * Font styling
 * Tutorial or more instruction - Help button with flow-chart?
 * Sounds / Music

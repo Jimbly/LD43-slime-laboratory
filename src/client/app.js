@@ -143,6 +143,16 @@ export function main(canvas) {
     game_width,
     game_height,
     pixely: false,
+    ui_sprites: {
+      button: ['ui.local/button.png', [34, 60, 34], [63]],
+      // button_rollover: ['ui.local/button_rollover.png', [34, 60, 34], [63]],
+      button_disabled: ['ui.local/button_disabled.png', [34, 60, 34], [63]],
+      button_down: ['ui.local/button_down.png', [34, 60, 34], [63]],
+      // menu_entry: ['ui.local/button_down.png', [34, 60, 34], [63]],
+      // menu_selected: ['ui.local/button_rollover.png', [34, 60, 34], [63]],
+      // menu_down: ['ui.local/button_down.png', [34, 60, 34], [63]],
+      panel: ['ui.local/panel.png', [12, 104, 12], [12, 104, 12]],
+    }
   });
 
   const sound_manager = glov_engine.sound_manager;
@@ -154,6 +164,8 @@ export function main(canvas) {
   const font = glov_engine.font;
 
   glov_ui.scaleSizes(2560 / 1280);
+  glov_ui.panel_pixel_scale = 1;
+  glov_ui.color_panel = v4Build(1, 1, 1, 1);
 
   const createSpriteSimple = glov_sprite.createSpriteSimple.bind(glov_sprite);
   const createAnimation = glov_sprite.createAnimation.bind(glov_sprite);
@@ -898,6 +910,7 @@ export function main(canvas) {
           color1: color_pipe,
           size: [1, 1],
           rotation,
+          no_focus: true,
         };
         if (rotateable/* && pipe.type !== 'merge'*/) {
           let { ret, state } = glov_ui.buttonShared(param);
