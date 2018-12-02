@@ -9,7 +9,6 @@ Start with: `npm start` (after running `npm i` once)
 
 TODO:
 * Would be useful to see current stats of all potions (and pets) - roll over something and they all show up? Always there? Hold shift?
-* Really need to show (floaters?) what happens when brewing
 
 Polish
 * Tutorial or more instruction - Help button with flow-chart?

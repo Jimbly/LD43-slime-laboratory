@@ -8,9 +8,9 @@ const local_storage = require('./local_storage.js');
 const particle_data = require('./particle_data.js');
 const random_seed = require('random-seed');
 
-const { v2Build, v3Add, v3Build, v3BuildZero, v3Max, v3Min, v3Sub, v4Build } = VMath;
-const { abs, ceil, min, max, sin, PI } = Math;
-const { defaults, merge, clone, titleCase, lerp, easeInOut } = require('../common/util.js');
+const { v2Build, v3Add, v3Build, v3BuildZero, v3Lerp, v3Max, v3Min, v3Sub, v4Build } = VMath;
+const { abs, ceil, min, max, round, sin, PI } = Math;
+const { clamp, defaults, merge, clone, titleCase, lerp, easeInOut } = require('../common/util.js');
 
 let DEBUG = String(document.location).indexOf('localhost') !== -1;
 
@@ -46,6 +46,8 @@ const MULLIGAN_MAX = 3;
 const POTENCY_MAX = 16;
 const ORDERS_FINAL = DEBUG ? 1 : 10;
 const ROT_TIME = 500;
+
+const DRAIN_TIME_PER_STEP = DEBUG ? 10 : 120;
 
 const potency_to_increase = [
   0,
@@ -591,13 +593,6 @@ export function main(canvas) {
   function doBrew() {
     let { sources, sinks } = game_state;
 
-    // clear any old sources
-    for (let ii = 0; ii < sources.length; ++ii) {
-      if (sources[ii] && !sources[ii].count) {
-        sources[ii] = null;
-      }
-    }
-
     let brew = calcBrew();
     let used = {};
     for (let ii = 0; ii < sinks.length; ++ii) {
@@ -1002,21 +997,79 @@ export function main(canvas) {
     return true;
   }
 
+  function showSinkTooltip(brew, ii, alpha, scale, detailed) {
+    let x0 = 1440;
+    let x_mid = x0 + sprite_size * ii + sprite_size / 2;
+    let y0 = 1120 + sprite_size / 6 - (scale - 1) * (48 * 3);
+    let style = glov_font.styleColored(null, 0x00000000 | (alpha * 255));
+    let size = 48 * scale;
+    let y = y0;
+    let output = output_from_type[brew[ii].type];
+    let color = v4Build(1, 1, 1, alpha);
+    let sink = game_state.sinks[ii];
+    for (let jj = 0; jj < 3; ++jj) {
+      if (output[jj] || detailed) {
+        if (detailed) {
+          let v = sink.value[jj];
+          let d = output[jj];
+          if (sink.blend) {
+            let dd = round(sink.blend * d);
+            v += dd;
+            v = clamp(v, 0, POTENCY_MAX);
+            d -= dd;
+          }
+          font.drawSized(style, x_mid - size, y, Z.TOOLTIP, size,
+            `= ${v} ${d ? `${output[jj] > 0 ? '+ ' : '- '}${abs(d)}` : ''}`);
+        } else {
+          font.drawSized(style, x_mid, y, Z.TOOLTIP, size,
+            `${output[jj] > 0 ? '+' : ''}${output[jj]}`);
+        }
+        sprites.icons.draw({
+          x: x_mid - size - (detailed ? size : 0),
+          y,
+          z: Z.TOOLTIP + 1,
+          size: [size, size],
+          frame: jj,
+          color,
+        });
+        y += size;
+      }
+    }
+    let w = sprite_size * 10 / 12 * scale + (detailed ? size * scale * 1.25 : 0);
+    glov_ui.panel({
+      x: x_mid - w / 2,
+      w,
+      y: y0 - 16 * scale,
+      h: y - y0 + 16 * 2 * scale,
+      color,
+    });
+  }
+
   function drawSinks(dt) {
     let brew = calcBrew();
     let x0 = 1440;
     let y0 = 1120;
     for (let ii = 0; ii < PIPE_DIM; ++ii) {
       let b = game_state.sinks[ii];
-      let type = beakerType(b.value, 3);
+      let zoom = b.zoom || 0;
+      let value = b.value;
+      if (b.blend) {
+        value = v3Lerp(value, b.blend_to, b.blend);
+      }
+      let type = beakerType(value, 3);
       let param = {
-        x: x0 + sprite_size * ii,
-        y: y0 + b.offset - 16,
-        z: Z.SPRITES + 3,
-        size: [1, 1], // drawing
+        x: x0 + sprite_size * ii - zoom * sprite_size/2,
+        y: y0 + b.offset - 16 - zoom * sprite_size*0.8*1.5,
+        z: Z.SPRITES + 3 + zoom * 10,
+        size: [1 + zoom, 1 + zoom], // drawing
         w: sprite_size, // mouse
         h: sprite_size * 1.5,
       };
+
+      if (zoom) {
+        // display stats in panel above beaker
+        showSinkTooltip(brew, ii, zoom, 1 + zoom, true);
+      }
 
       let over = false;
       if (type < 0) {
@@ -1146,14 +1199,60 @@ export function main(canvas) {
     brew_anim = animation.create();
 
     let t = 0;
-    let time_per_step = 120;
-    t = brew_anim.add(t, (game_state.max_fill + 1) * time_per_step, (progress) => {
+    t = brew_anim.add(t, (game_state.max_fill + 1) * DRAIN_TIME_PER_STEP, (progress) => {
       game_state.drain_progress = progress * (game_state.max_fill + 1);
     });
 
-    // TODO: animate the results of the brew - each potion doing a floater or
-    // zoom in, then stats change, then zoom out as the next one is zooming in
     t = brew_anim.add(t, 0, () => {
+      // clear any old sources
+      let { sources } = game_state;
+      for (let ii = 0; ii < sources.length; ++ii) {
+        if (sources[ii] && !sources[ii].count) {
+          sources[ii] = null;
+        }
+      }
+    });
+
+
+    const TIME_BREW_FADE_IN = 500;
+    const TIME_BREW_BLEND = 1000;
+    const TIME_BREW_FADE_OUT = 500;
+    let brew = calcBrew();
+    function fadeInSink(idx, progress) {
+      game_state.sinks[idx].blend = 0;
+      game_state.sinks[idx].zoom = progress;
+    }
+    function blendSink(idx, progress) {
+      game_state.sinks[idx].blend = progress;
+    }
+    function fadeOutSink(idx, progress) {
+      game_state.sinks[idx].zoom = 1 - progress;
+    }
+    // animate the results of the brew - each potion doing a floater or
+    // zoom in, then stats change, then zoom out as the next one is zooming in
+    let last_t = t;
+    brew.forEach(function (b, idx) {
+      if (!b) {
+        return;
+      }
+      let sink = game_state.sinks[idx];
+
+      let new_value = v3Add(sink.value, output_from_type[b.type]);
+      v3Max(new_value, VMath.zero_vec, new_value);
+      v3Min(new_value, [POTENCY_MAX, POTENCY_MAX, POTENCY_MAX], new_value);
+      sink.blend_to = new_value;
+
+      t = brew_anim.add(last_t, TIME_BREW_FADE_IN, fadeInSink.bind(null, idx));
+      t = brew_anim.add(t, TIME_BREW_BLEND, blendSink.bind(null, idx));
+      last_t = t;
+      t = brew_anim.add(t, TIME_BREW_FADE_OUT, fadeOutSink.bind(null, idx));
+    });
+
+    t = brew_anim.add(t, 0, () => {
+      brew.forEach(function (b, idx) {
+        game_state.sinks[idx].blend = 0;
+        game_state.sinks[idx].blend_to = null;
+      });
       doBrew();
     });
 
@@ -1244,39 +1343,16 @@ export function main(canvas) {
     }
     // Beakers
     let brew = calcBrew();
-    let x0 = 1440;
-    let y0 = 1120 + sprite_size / 6;
     let any_output = false;
-    let style = glov_font.styleColored(null, 0x000000ff);
+
     for (let ii = 0; ii < PIPE_DIM; ++ii) {
       if (brew[ii]) {
         any_output = true;
-        let x = x0 + sprite_size * ii;
-        let y = y0;
-        let size = 48;
-        let output = output_from_type[brew[ii].type];
-        for (let jj = 0; jj < 3; ++jj) {
-          if (output[jj]) {
-            font.drawSized(style, x + sprite_size / 2, y, Z.TOOLTIP, size,
-              `${output[jj] > 0 ? '+' : ''}${output[jj]}`);
-            sprites.icons.draw({
-              x: x + sprite_size / 2 - size,
-              y,
-              z: Z.TOOLTIP + 1,
-              size: [size, size],
-              frame: jj,
-            });
-            y += size;
-          }
-        }
-        glov_ui.panel({
-          x: x + sprite_size / 12,
-          w: sprite_size * 10 / 12,
-          y: y0 - 16,
-          h: y - y0 + 16 * 2,
-        });
+        showSinkTooltip(brew, ii, 1, 1, false);
       }
     }
+    let x0 = 1440;
+    let y0 = 1120 + sprite_size / 6;
     if (!any_output) {
       drawTooltipCentered(x0 + sprite_size * 3, y0 + sprite_size * 1.5/2 - 24 - 8,
         'Warning: No potions will be brewed!');
@@ -1287,6 +1363,7 @@ export function main(canvas) {
 
   function drawButtons(dt) {
     let w = 310;
+    let disabled = brew_anim ? true : false;
     if (game_state.selected) {
       if (game_state.selected[0] === 'potion') {
         if (glov_ui.buttonText({
@@ -1308,6 +1385,7 @@ export function main(canvas) {
         tooltip: 'Advances time.  Consume 1 of any ingredient used in any potion, and add to the' +
           ' potions.  Also, any hungry pets will lose 1 of each stat.',
         tooltip_width: 1200,
+        disabled,
       })) {
         let { no_brew, hungry } = showBrewTooltips(dt);
         if (no_brew && !game_state.warned.no_brew) {
@@ -1382,7 +1460,7 @@ export function main(canvas) {
         y: 1360,
         text: `New Pipes (${game_state.mulligan})`,
         w,
-        disabled: !game_state.mulligan,
+        disabled: !game_state.mulligan || disabled,
         tooltip: `Generate a new layout of pipes in your alchemical workshop.  You can do this ${game_state.mulligan}` +
           ' times, and once more every Brew.',
         tooltip_width: 1200,
@@ -1405,6 +1483,7 @@ export function main(canvas) {
         w,
         tooltip: 'Spend GP to buy new pets',
         tooltip_width: 700,
+        disabled,
       })) {
         // display shop
         shop_up = true;
@@ -2111,7 +2190,8 @@ export function main(canvas) {
   function pipes(dt) {
     draw_list.queue(sprites.game_bg, 0, 0, Z.BACKGROUND);
 
-    if (brew_anim && brew_anim.update(dt)) {
+    let speedup = glov_input.isMouseDown() || glov_input.isKeyDown(key_codes.SHIFT);
+    if (brew_anim && brew_anim.update(speedup ? 3 * dt : dt)) {
       glov_input.eatAllInput();
     } else {
       brew_anim = null;
