@@ -1035,10 +1035,10 @@ export function main(canvas) {
   }
 
   function petWidth(pet) {
-    return pet.size * sprite_size;
+    return (1 + 0.5 * (pet.size - 1)) * sprite_size;
   }
   function petHeight(pet) {
-    return sprite_size;
+    return (1 + 0.5 * (pet.size - 1)) * sprite_size;
   }
   function drawPet(pet, x, y, z) {
     let type = beakerType(pet.value, 3);
@@ -1108,7 +1108,7 @@ export function main(canvas) {
       if (selected) {
         param.color = v4Build(1, 1, 1, selected);
         param.z -= 0.5;
-        sprites.pet_select[pet.size].draw(param);
+        sprites.pet_select[1/*pet.size*/].draw(param);
       }
 
       if (over) {
@@ -1378,6 +1378,7 @@ export function main(canvas) {
 
     let y_save = y;
     let sub_w = w / 3;
+    let max_pet_height = petHeight({ size: 3 });
     for (let ii = 0; ii < game_state.shop.length; ++ii) {
       if (!game_state.shop[ii]) {
         continue;
@@ -1385,14 +1386,15 @@ export function main(canvas) {
       y = y_save;
       let pet = game_state.shop[ii];
       let pet_w = petWidth(pet);
-      let param = drawPet(pet, x + (ii + 0.5) * sub_w - pet_w / 2, y + font_size * 2, z);
+      let pet_h = petHeight(pet);
+      let param = drawPet(pet, x + (ii + 0.5) * sub_w - pet_w / 2, y + font_size * 2 + (max_pet_height - pet_h) / 2, z);
       let title = titleCase(`${adjectives.pet[param.type]} ${pet.species}`);
       font.drawSizedAligned(style, x + ii * sub_w, y, z, font_size, glov_font.ALIGN.HCENTER, sub_w, 0, title);
       y += font_size;
       font.drawSizedAligned(style, x + ii * sub_w, y, z, font_size, glov_font.ALIGN.HCENTER, sub_w, 0,
         `Size: ${pet.size}`);
       y += font_size;
-      y += petHeight({ size: 3 });
+      y += max_pet_height;
       let icon_size = font_size;
       for (let jj = 0; jj < 3; ++jj) {
         let icon_x = x + ii * sub_w + jj * (sub_w - pad) / 3 + pad / 2;
