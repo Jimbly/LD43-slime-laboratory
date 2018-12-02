@@ -18,6 +18,8 @@ window.Z = window.Z || {};
 Z.BACKGROUND = 0;
 Z.SPRITES = 10;
 Z.PARTICLES = 20;
+Z.UI = 100;
+Z.DRAG = 200;
 
 // let app = exports;
 // Virtual viewport for our game logic
@@ -620,6 +622,8 @@ export function main(canvas) {
       origin: origin_0_0.origin,
     });
 
+    sprites.spike_highlight = createSpriteSimple('spike_highlight.png', 960, 240, origin_0_0);
+
     sprites.meat = createSpriteSimple('meat', sprite_size, sprite_size, params_square);
 
     sprites.game_bg = createSpriteSimple('bg.png', 2560, 1600, {
@@ -900,14 +904,18 @@ export function main(canvas) {
         if (glov_input.clickHit(param)) {
           over = true;
           glov_ui.playUISound('select');
-          game_state.selected = ['potion', ii];
+          if (game_state.selected && game_state.selected[0] === 'potion' && game_state.selected[1] === ii) {
+            game_state.selected = null;
+          } else {
+            game_state.selected = ['potion', ii];
+          }
           selected = 1;
         } else if (game_state.selected && game_state.selected[0] === 'potion' && game_state.selected[1] === ii) {
           selected = 0.75;
         }
         if (glov_input.isMouseOver(param)) {
           over = true;
-          if (!selected) {
+          if (!selected && !game_state.selected) {
             selected = 0.5;
           }
         }
@@ -915,6 +923,15 @@ export function main(canvas) {
         param.color = fluid_colors[type];
         param.color1 = fluid_colors_glow[type];
         sprites.beaker_full.drawDualTint(param);
+        if (game_state.selected && game_state.selected[0] === 'potion' && game_state.selected[1] === ii) {
+          let mpos = glov_input.mousePos();
+          sprites.beaker_full.drawDualTint(defaults({
+            x: mpos[0] - sprite_size / 2,
+            y: mpos[1] - sprite_size / 2,
+            z: Z.DRAG,
+            color: v4Build(param.color[0], param.color[1], param.color[2], 0.5),
+          }, param));
+        }
         if (selected) {
           param.color = v4Build(1, 1, 1, selected);
           param.z--;
@@ -997,12 +1014,30 @@ export function main(canvas) {
     let y = 1360 + 90;
     let style = null;
 
-    glov_ui.print(style, x, y, Z.UI, `Turns: ${game_state.turns}`);
-    font.drawSizedAligned(style, x, y, Z.UI, 48, glov_font.ALIGN.HRIGHT, w, 0, `GP: ${game_state.gp}`);
-    y += 48;
-    glov_ui.print(style, x, y, Z.UI, `Orders Completed: ${game_state.orders_done}` +
-      `${game_state.endless ? '' : ` / ${ORDERS_FINAL}`}`);
-    y += 48;
+    if (game_state.selected) {
+      y -= 20;
+      if (game_state.selected[0] === 'potion') {
+        font.drawSizedAligned(style, x, y, Z.UI, 48, glov_font.ALIGN.HCENTER, w, 0,
+          'Drop Potions on Pets to feed and grow them,');
+      } else {
+        y -= 48;
+        font.drawSizedAligned(style, x, y, Z.UI, 48, glov_font.ALIGN.HCENTER, w, 0,
+          'Drop Pets on spikes to get more fluids,');
+      }
+      y += 48 + 8;
+      font.drawSizedAligned(style, x, y, Z.UI, 48, glov_font.ALIGN.HCENTER, w, 0,
+        'or Orders to fulfill them.');
+      y += 48;
+      font.drawSizedAligned(style, x, y, Z.UI, 48, glov_font.ALIGN.HCENTER, w, 0,
+        'Click anywhere else to cancel.');
+    } else {
+      glov_ui.print(style, x, y, Z.UI, `Turns: ${game_state.turns}`);
+      font.drawSizedAligned(style, x, y, Z.UI, 48, glov_font.ALIGN.HRIGHT, w, 0, `GP: ${game_state.gp}`);
+      y += 48;
+      glov_ui.print(style, x, y, Z.UI, `Orders Completed: ${game_state.orders_done}` +
+        `${game_state.endless ? '' : ` / ${ORDERS_FINAL}`}`);
+      y += 48;
+    }
   }
 
   function drawTooltipCentered(x, y, tooltip) {
@@ -1206,16 +1241,20 @@ export function main(canvas) {
     pet.fed = true;
   }
 
-  function drawPet(pet, x, y, z) {
+  function drawPet(pet, x, y, z, alpha) {
     let type = beakerType(pet.value, 3);
     if (type === -1) {
       type = 6;
     }
     let w = petWidth(pet);
     let h = petHeight(pet);
+    let color = fluid_colors[type];
+    if (alpha !== 1) {
+      color = v4Build(color[0], color[1], color[2], alpha);
+    }
     let param = {
       x, y, z,
-      color: fluid_colors[type],
+      color,
       color1: fluid_colors_glow[type],
       size: [w / sprite_size, h / sprite_size], // drawing
       w, h, // mouse
@@ -1231,7 +1270,19 @@ export function main(canvas) {
     let need_sort = false;
     for (let ii = 0; ii < pen.length; ++ii) {
       let pet = pen[ii];
-      let param = drawPet(pet, pet.pos[0], pet.pos[1], Z.SPRITES + pen.length - ii);
+      let alpha = 1;
+      if (game_state.selected && game_state.selected[0] === 'pet' && game_state.selected[1] === ii) {
+        let mpos = glov_input.mousePos();
+        drawPet(pet, mpos[0] - petWidth(pet) / 2, mpos[1] - petHeight(pet) / 2, Z.DRAG, 0.5);
+        alpha = 0.75;
+        sprites.spike_highlight.draw({
+          x: 1440,
+          y: 0,
+          z: Z.SPRITES - 0.5,
+          size: [960, 240],
+        });
+      }
+      let param = drawPet(pet, pet.pos[0], pet.pos[1], Z.SPRITES + pen.length - ii, alpha);
       let type = param.type;
 
       let selected = 0;
@@ -1259,9 +1310,9 @@ export function main(canvas) {
         let mpos;
         if ((mpos = glov_input.clickHit(pen_param))) {
           game_state.selected = null;
-          pet.pos[0] = min(max(PEN_X0, mpos[0] - pet.size * sprite_size / 2),
+          pet.pos[0] = min(max(PEN_X0, mpos[0] - petWidth(pet) / 2),
             PEN_X0 + PEN_W - pet.size * sprite_size);
-          pet.pos[1] = min(max(PEN_Y0, mpos[1] - sprite_size / 2), PEN_Y0 + PEN_H - sprite_size);
+          pet.pos[1] = min(max(PEN_Y0, mpos[1] - petHeight(pet) / 2), PEN_Y0 + PEN_H - sprite_size);
           need_sort = true;
         }
       }
@@ -1409,7 +1460,7 @@ export function main(canvas) {
     let y = ORDERS_Y0;
     font.drawSizedAligned(null, ORDERS_X0, y, Z.UI, font_size, glov_font.ALIGN.HCENTER, ORDERS_W, 0,
       'Current Orders (Reward: 2 GP each)');
-    y += font_size;
+    y += font_size + 4;
 
     if (!orders.length) {
       font.drawSizedAligned(null, ORDERS_X0, y + font_size, Z.UI, font_size, glov_font.ALIGN.HCENTER, ORDERS_W, 0,
@@ -1565,7 +1616,7 @@ export function main(canvas) {
       let pet = game_state.shop[ii];
       let pet_w = petWidth(pet);
       let pet_h = petHeight(pet);
-      let param = drawPet(pet, x + (ii + 0.5) * sub_w - pet_w / 2, y + font_size * 2 + (max_pet_height - pet_h) / 2, z);
+      let param = drawPet(pet, x + (ii + 0.5) * sub_w - pet_w / 2, y + font_size * 2 + (max_pet_height - pet_h) / 2, z, 1);
       let title = titleCase(`${adjectives.pet[param.type]} ${pet.species}`);
       font.drawSizedAligned(style, x + ii * sub_w, y, z, font_size, glov_font.ALIGN.HCENTER, sub_w, 0, title);
       y += font_size;
