@@ -11,8 +11,8 @@ Notes:
 * Didn't realize could drag from beakers to pets, pets to orders, pets to spikes
 
 TODO:
-* High scores
 * Daily summary if things go wrong - especially if pets are starving - Modal confirm first
+* High scores
 * Show picked up potion and/or pet under mouse
   * Highlight all possible places it could go
 * Would be useful to see current stats of all potions (and pets) - roll over something and they all show up? Always there? Hold shift?
@@ -21,6 +21,7 @@ TODO:
 * Allow selecting pet first, then food, show same tooltip
 
 Polish
+* Font styling
 * Animate pipes rotating
 * Tutorial or more instruction - Help button with flow-chart?
 * Sounds / Music

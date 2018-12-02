@@ -200,6 +200,7 @@ export function main(canvas) {
     return {
       type: PIPE_DIST[rand(PIPE_DIST.length)],
       rot: rand(4),
+      fill: [{}, {}],
     };
   }
   function newPipes() {
@@ -231,18 +232,20 @@ export function main(canvas) {
   }
 
   function randomOrder(type) {
-    let difficulty = game_state.orders_done + 1; // 1 - 8
+    let difficulty = 1 + game_state.orders_done * 0.75; // 1 - 6.25, then Ambrosia
     let options = [
       {
         type: 'potion',
         name: 'Pure Potion',
         min: [4 + difficulty * 0.75, null, null],
         max: [null, 0, 0],
+        min_idx: 3,
       }, {
         type: 'potion',
         name: 'Potion of Elixir',
         min: [1 + difficulty / 2, 1 + difficulty / 2, 1 + difficulty / 2],
         color: 7,
+        max_idx: 7,
       }, {
         type: 'potion',
         name: 'Potion',
@@ -278,6 +281,7 @@ export function main(canvas) {
         name: 'Golden Pet',
         min: [difficulty / 2, difficulty / 2, difficulty / 2],
         color: 7,
+        min_idx: 3,
       }, {
         type: 'pet',
         name: 'Specialized Pet',
@@ -311,9 +315,12 @@ export function main(canvas) {
         no_random: true,
       }
     ];
+    let idx = game_state.orders_done + game_state.orders.length + 1;
     options = options.filter((order) => order.type === type);
+    options = options.filter((order) => !order.min_idx || idx >= order.min_idx);
+    options = options.filter((order) => !order.max_idx || idx <= order.min_idx);
     let order = options[rand_orders(options.length)];
-    if (!game_state.endless && game_state.orders_done + game_state.orders.length + 1 === ORDERS_FINAL) {
+    if (!game_state.endless && idx === ORDERS_FINAL) {
       order = {
         type: 'potion',
         name: 'Ambrosia',
@@ -413,8 +420,8 @@ export function main(canvas) {
 
   function newGame() {
     shop_up = false;
-    rand = random_seed.create(3);
-    rand_orders = random_seed.create(123);
+    rand = random_seed.create(DEBUG ? 6 : 3);
+    rand_orders = random_seed.create(3); // 3's not bad
     game_state = {
       endless: false,
       selected: null,
@@ -428,7 +435,8 @@ export function main(canvas) {
       orders: [],
       orders_done: 0,
       shop: newShop(),
-      next_order_type: 'pet'
+      next_order_type: 'pet',
+      warned: {},
     };
     game_state.orders.push(randomOrderProtected());
     newPipes();
@@ -460,6 +468,18 @@ export function main(canvas) {
       }));
     }
     sortPens();
+
+    if (DEBUG) {
+      game_state.warned.no_brew = true;
+      game_state.warned.hungry = true;
+    }
+  }
+
+  function petWidth(pet) {
+    return (1 + 0.5 * (pet.size - 1)) * sprite_size;
+  }
+  function petHeight(pet) {
+    return (1 + 0.5 * (pet.size - 1)) * sprite_size;
   }
 
   function calcBrew() {
@@ -982,6 +1002,70 @@ export function main(canvas) {
     y += 48;
   }
 
+  function drawTooltipCentered(x, y, tooltip) {
+    let w = font.getStringWidth(null, 48, tooltip) + 16*2;
+    glov_ui.drawTooltip({
+      tooltip,
+      x: x - w / 2,
+      y: y - (16*2+48) / 2,
+      tooltip_width: w,
+    });
+  }
+
+  function showBrewTooltips(dt) {
+    let ret = {};
+    let { pen } = game_state;
+    let tooltip = 'Hungry! (-1 Stats)';
+    for (let ii = 0; ii < pen.length; ++ii) {
+      let pet = pen[ii];
+      if (!pet.fed && (pet.value[0] || pet.value[1] || pet.value[2])) {
+        drawTooltipCentered(pet.pos[0] + petWidth(pet) / 2, pet.pos[1] + petHeight(pet) / 2, tooltip);
+        ret.hungry = true;
+      }
+    }
+    // Beakers
+    let brew = calcBrew();
+    let x0 = 1440;
+    let y0 = 1120 + sprite_size / 6;
+    let any_output = false;
+    let style = glov_font.styleColored(null, 0x000000ff);
+    for (let ii = 0; ii < PIPE_DIM; ++ii) {
+      if (brew[ii]) {
+        any_output = true;
+        let x = x0 + sprite_size * ii;
+        let y = y0;
+        let size = 48;
+        let output = output_from_type[brew[ii].type];
+        for (let jj = 0; jj < 3; ++jj) {
+          if (output[jj]) {
+            font.drawSized(style, x + sprite_size / 2, y, Z.TOOLTIP, size,
+              `${output[jj] > 0 ? '+' : ''}${output[jj]}`);
+            sprites.icons.draw({
+              x: x + sprite_size / 2 - size,
+              y,
+              z: Z.TOOLTIP + 1,
+              size: [size, size],
+              frame: jj,
+            });
+            y += size;
+          }
+        }
+        glov_ui.panel({
+          x: x + sprite_size / 12,
+          w: sprite_size * 10 / 12,
+          y: y0 - 16,
+          h: y - y0 + 16 * 2,
+        });
+      }
+    }
+    if (!any_output) {
+      drawTooltipCentered(x0 + sprite_size * 3, y0 + sprite_size * 1.5/2 - 24 - 8,
+        'Warning: No potions will be brewed!');
+      ret.no_brew = true;
+    }
+    return ret;
+  }
+
   function drawPipesUI(dt) {
     let w = 310;
     if (game_state.selected) {
@@ -1006,8 +1090,39 @@ export function main(canvas) {
           ' potions.  Also, any hungry pets will lose 1 of each stat.',
         tooltip_width: 1200,
       })) {
-        doBrew();
-        nextDay();
+        let { no_brew, hungry } = showBrewTooltips(dt);
+        if (no_brew && !game_state.warned.no_brew) {
+          game_state.warned.no_brew = true;
+          glov_ui.modalDialog({
+            title: 'Should Not Brew',
+            text: 'No output (tutorial warning)\n\nBefore Brewing, you must click' +
+              ' on the pipes to rotate them to direct the flow to the bottom, in order to brew potions.\n\n' +
+              'This warning will not be shown again.  Click Brew again when ready.',
+            buttons: {
+              'OK': null,
+            }
+          });
+        } else if (hungry && !game_state.warned.hungry) {
+          game_state.warned.hungry = true;
+          glov_ui.modalDialog({
+            title: 'Starving Pets',
+            text: 'Stat loss (tutorial warning)\n\nSome of your pets are hungry, and will lose' +
+              ' one of each stat when you next Brew!\n\nYou should consider feeding hungry pets' +
+              ' potions, or tapping them for ingredients rather than wasting their strength.\n\n' +
+              'Note: sometimes it may be strategic to let a pet starve.\n\n' +
+              'This warning will not be shown again.  Click Brew again when ready.',
+            buttons: {
+              'OK': null,
+            }
+          });
+        } else {
+          doBrew();
+          nextDay();
+        }
+      } else {
+        if (glov_ui.button_mouseover) {
+          showBrewTooltips(dt);
+        }
       }
       if (glov_ui.buttonText({
         x: 1440 + (2400 - 1440 - w) / 2,
@@ -1019,8 +1134,15 @@ export function main(canvas) {
           ' times, and once more every Brew.',
         tooltip_width: 1200,
       })) {
-        --game_state.mulligan;
-        newPipes();
+        if (1) {
+          --game_state.mulligan;
+          newPipes();
+        } else {
+          // debug order progression
+          game_state.orders_done++;
+          game_state.orders = [];
+          game_state.orders.push(randomOrderProtected());
+        }
       }
       if (glov_ui.buttonText({
         x: 2400 - w,
@@ -1047,12 +1169,6 @@ export function main(canvas) {
     pet.fed = true;
   }
 
-  function petWidth(pet) {
-    return (1 + 0.5 * (pet.size - 1)) * sprite_size;
-  }
-  function petHeight(pet) {
-    return (1 + 0.5 * (pet.size - 1)) * sprite_size;
-  }
   function drawPet(pet, x, y, z) {
     let type = beakerType(pet.value, 3);
     if (type === -1) {
