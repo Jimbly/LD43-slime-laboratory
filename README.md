@@ -8,7 +8,6 @@ LD43 Entry by Jimbly
 Start with: `npm start` (after running `npm i` once)
 
 TODO:
-* High scores
 * Would be useful to see current stats of all potions (and pets) - roll over something and they all show up? Always there? Hold shift?
 * Really need to show (floaters?) what happens when brewing
 

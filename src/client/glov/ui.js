@@ -412,7 +412,7 @@ class GlovUI {
   }
 
   modalDialogRun(modal_dialog) {
-    const button_width = this.button_width / 2;
+    const button_width = modal_dialog.button_width || this.button_width / 2;
     const game_width = this.camera.x1() - this.camera.x0();
     const pad = this.pad;
     const text_w = this.modal_width - pad * 2;

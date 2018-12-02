@@ -44,7 +44,7 @@ const sprite_size = 160;
 const PET_SIZE = sprite_size;
 const MULLIGAN_MAX = 3;
 const POTENCY_MAX = 16;
-const ORDERS_FINAL = 10;
+const ORDERS_FINAL = DEBUG ? 1 : 10;
 const ROT_TIME = 500;
 
 const potency_to_increase = [
@@ -129,9 +129,14 @@ const SPECIES = [
   'slime',
 ];
 
+let menu_up = false;
+let high_scores_up = false;
+
 export function main(canvas) {
   const glov_engine = require('./glov/engine.js');
   const glov_font = require('./glov/font.js');
+  const glov_simple_menu = require('./glov/simple_menu.js');
+  const score_system = require('./glov/score.js');
 
   glov_engine.startup({
     canvas,
@@ -194,6 +199,26 @@ export function main(canvas) {
   let rand_orders;
   let game_state;
   let brew_anim;
+
+  // higher score is "better"
+  const score_mod1 = 10000;
+  const score_mod2 = 10000;
+  const turns_inv = 9999;
+  function scoreToValue(score) {
+    return score.orders * score_mod1 * score_mod2 + score.gp * score_mod1 + (turns_inv - score.turns);
+  }
+  function valueToScore(score) {
+    let turns = turns_inv - score % score_mod1;
+    score = Math.floor(score / score_mod1);
+    let gp = score % score_mod2;
+    score = Math.floor(score / score_mod2);
+    let orders = score;
+    return { orders, gp, turns };
+  }
+  let have_scores = false;
+  score_system.init(scoreToValue, valueToScore, { all: { name: 'all' } }, 'LD43');
+  score_system.getScore('all');
+
 
   function typeMix(type1, type2) {
     let a = min(type1, type2);
@@ -352,7 +377,7 @@ export function main(canvas) {
       if (order[field]) {
         // Swap order of all array parameters
         if (!order.no_random) {
-          order[field] = order[field].map((v, idx) => order[field][permute[idx]]);
+          order[field] = order[field].map((v, idx2) => order[field][permute[idx2]]);
         }
         // Ceil all float values
         order[field] = order[field].map((v) => {
@@ -436,6 +461,7 @@ export function main(canvas) {
   }
 
   function newGame() {
+    menu_up = false;
     shop_up = false;
     rand = random_seed.create(DEBUG ? 6 : 3);
     rand_orders = random_seed.create(3); // 3's not bad
@@ -1560,6 +1586,9 @@ export function main(canvas) {
     game_state.gp += 2;
     game_state.orders_done++;
     game_state.orders.splice(order_idx, 1);
+    score_system.setScore('all', { orders: game_state.orders_done, gp: game_state.gp, turns: game_state.turns }, () => {
+      have_scores = true;
+    });
   }
 
   const ORDERS_X0 = 80;
@@ -1580,14 +1609,15 @@ export function main(canvas) {
       font.drawSizedAligned(null, ORDERS_X0, y + font_size, Z.UI, font_size, glov_font.ALIGN.HCENTER, ORDERS_W, 0,
         'A new order will appear when you Brew');
       if (!game_state.endless && game_state.orders_done === ORDERS_FINAL) {
-        // TODO: high score screen here
+        game_state.endless = true;
         glov_ui.modalDialog({
           title: 'You win!',
           text: 'Congratulations, you have brewed the ultimate potion, Ambrosia, and fulfilled all other orders.' +
-            ' Consider yourself a hero. Click OK to continue in Endless Mode, if you really want to.',
+            ' Consider yourself a hero. After viewing the High Scores, you may in Endless Mode, if you really want to.',
+          button_width: 400,
           buttons: {
-            'OK': function () {
-              game_state.endless = true;
+            'High Scores': function () {
+              high_scores_up = true;
             },
           }
         });
@@ -1731,7 +1761,8 @@ export function main(canvas) {
       let pet = game_state.shop[ii];
       let pet_w = petWidth(pet);
       let pet_h = petHeight(pet);
-      let param = drawPet(pet, x + (ii + 0.5) * sub_w - pet_w / 2, y + font_size * 2 + (max_pet_height - pet_h) / 2, z, 1);
+      let param = drawPet(pet, x + (ii + 0.5) * sub_w - pet_w / 2, y + font_size * 2 + (max_pet_height - pet_h) / 2,
+        z, 1);
       let title = titleCase(`${adjectives.pet[param.type]} ${pet.species}`);
       font.drawSizedAligned(style, x + ii * sub_w, y, z, font_size, glov_font.ALIGN.HCENTER, sub_w, 0, title);
       y += font_size;
@@ -1876,6 +1907,185 @@ export function main(canvas) {
     }
   }
 
+  let esc_menu;
+  function doMenu(dt) {
+    const width = 800;
+    const x = (game_width - width) / 2;
+    const y0 = 200;
+    let y = y0;
+    const z = Z.MODAL + 1;
+    const line_size = 48;
+    const pad = 16;
+
+    y += pad;
+
+    font.drawSizedAligned(
+      glov_font.styleColored(null, 0x000000ff), x, y, z,
+      line_size * 1.5, glov_font.ALIGN.HCENTER, width, 0, 'Menu'
+    );
+
+    y += line_size * 1.5 + pad;
+
+    if (!esc_menu) {
+      esc_menu = glov_simple_menu.create({
+        display: {
+          centered: true,
+          no_background: true,
+        },
+        x: x + (width - glov_ui.button_width) / 2,
+        y, z,
+        items: [
+          {
+            name: 'Reset Game',
+            cb: () => newGame(),
+          },
+          {
+            name: 'High Scores',
+            cb: () => {
+              score_system.updateHighScores(function () {
+                have_scores = true;
+              });
+              high_scores_up = true;
+            }
+          },
+          {
+            name: 'Continue Game',
+            exit: true,
+          }
+        ],
+      });
+    }
+
+    y += esc_menu.run();
+    y += pad;
+
+    if (esc_menu.isSelected()) {
+      menu_up = false;
+      glov_ui.focusCanvas(); // don't auto-focus chat box
+    }
+
+    glov_ui.panel({
+      x: x,
+      y: y0,
+      z: z - 1,
+      w: width,
+      h: y - y0,
+    });
+
+    glov_ui.menuUp();
+  }
+
+  let scores_edit_box;
+  function doHighScores(dt) {
+    /* eslint no-bitwise:off */
+    if (!have_scores) {
+      return;
+    }
+    let x = game_width / 4;
+    let y = game_height / 16;
+    let y0 = y;
+    let z = Z.MODAL + 10;
+    let size = 42;
+    let pad = size;
+    let width = game_width / 2;
+    font.drawSizedAligned(null, x, y, z, size * 2, glov_font.ALIGN.HCENTERFIT, width, 0, 'HIGH SCORES');
+    y += size * 2 + 2;
+    let scores = score_system.high_scores.all;
+    let widths = [8, 40, 15, 24, 20];
+    let widths_total = 0;
+    for (let ii = 0; ii < widths.length; ++ii) {
+      widths_total += widths[ii];
+    }
+    let set_pad = size / 2;
+    for (let ii = 0; ii < widths.length; ++ii) {
+      widths[ii] *= (width - set_pad * (widths.length - 1)) / widths_total;
+    }
+    let align = [
+      glov_font.ALIGN.HFIT | glov_font.ALIGN.HRIGHT,
+      glov_font.ALIGN.HFIT,
+      glov_font.ALIGN.HFIT | glov_font.ALIGN.HCENTER,
+      glov_font.ALIGN.HFIT | glov_font.ALIGN.HCENTER,
+      glov_font.ALIGN.HFIT | glov_font.ALIGN.HCENTER,
+    ];
+    function drawSet(arr, style) {
+      let xx = x;
+      for (let ii = 0; ii < arr.length; ++ii) {
+        font.drawSizedAligned(style, xx, y, z, size, align[ii], widths[ii], 0, String(arr[ii]));
+        xx += widths[ii] + set_pad;
+      }
+      y += size;
+    }
+    drawSet(['', 'Name', 'Orders', 'GP', 'Turns'], glov_font.styleColored(null, 0xC2C3C7ff));
+    y += 4;
+    let score_style = glov_font.styleColored(null, 0xFFF1E8ff);
+    let found_me = false;
+    for (let ii = 0; ii < scores.length; ++ii) {
+      let s = scores[ii];
+      let style = score_style;
+      let drawme = false;
+      if (s.name === score_system.player_name) {
+        style = glov_font.styleColored(null, 0x00E436ff);
+        found_me = true;
+        drawme = true;
+      }
+      if (ii < 15 || drawme) {
+        drawSet([`#${ii+1}`, score_system.formatName(s), s.score.orders, s.score.gp, s.score.turns], style);
+      }
+    }
+    y += set_pad;
+    if (found_me && score_system.player_name.indexOf('Anonymous') === 0) {
+      if (!scores_edit_box) {
+        scores_edit_box = glov_ui.createEditBox({
+          z,
+          w: game_width / 4,
+        });
+        scores_edit_box.setText(score_system.player_name);
+      }
+
+      if (scores_edit_box.run({
+        x,
+        y,
+      }) === scores_edit_box.SUBMIT || glov_ui.buttonText({
+        x: x + scores_edit_box.w + size,
+        y: y - size * 0.25,
+        z,
+        w: size * 9,
+        h: glov_ui.button_height,
+        font_height: glov_ui.font_height * 0.75,
+        text: 'Update Player Name'
+      })) {
+        // scores_edit_box.text
+        if (scores_edit_box.text) {
+          score_system.updatePlayerName(scores_edit_box.text);
+        }
+      }
+      y += size;
+    }
+
+    y += pad;
+
+    if (glov_ui.buttonText({
+      x, y, z,
+      w: 600,
+      text: game_state.endless ? 'Continue in Endless' : 'Back to Game'
+    })) {
+      high_scores_up = false;
+    }
+    y += glov_ui.button_height;
+
+    glov_ui.panel({
+      x: x - pad,
+      w: game_width / 2 + pad * 2,
+      y: y0 - pad,
+      h: y - y0 + pad * 2,
+      z: z - 1,
+      color: v4Build(0, 0, 0, 1),
+    });
+
+    glov_ui.menuUp();
+  }
+
+
   function pipes(dt) {
     draw_list.queue(sprites.game_bg, 0, 0, Z.BACKGROUND);
 
@@ -1889,8 +2099,33 @@ export function main(canvas) {
     let have_clicks = glov_input.clicks[0] && glov_input.clicks[0].length;
     let selected_save = game_state.selected;
 
+    if (menu_up || high_scores_up || shop_up) {
+      if (glov_input.keyDownHit(key_codes.ESCAPE) || glov_input.padDownHit(pad_codes.START)) {
+        menu_up = false;
+        high_scores_up = false;
+        shop_up = false;
+        glov_ui.focusCanvas();
+      }
+    }
+
+    if (menu_up) {
+      doMenu(dt);
+    }
+
     if (shop_up) {
       doShop(dt);
+    }
+
+    if (high_scores_up) {
+      doHighScores(dt);
+    }
+
+    if (glov_ui.buttonText({ x: 20, y: 20, text: 'Menu', disabled: menu_up, button_width: 200 }) && !menu_up) {
+      menu_up = true;
+    }
+
+    if (!glov_ui.menu_up && glov_input.keyDownHit(key_codes.ESCAPE) || glov_input.padDownHit(pad_codes.START)) {
+      menu_up = true;
     }
 
     drawSources(dt);
@@ -1908,6 +2143,9 @@ export function main(canvas) {
   }
 
   function pipesInit(dt) {
+    score_system.updateHighScores(function () {
+      have_scores = true;
+    });
     glov_engine.setState(pipes);
     pipes(dt);
   }
