@@ -41,7 +41,7 @@ const sprite_size = 160;
 const PET_SIZE = sprite_size;
 const MULLIGAN_MAX = 3;
 const POTENCY_MAX = 16;
-const ORDERS_FINAL = 1;
+const ORDERS_FINAL = 10;
 
 const potency_to_increase = [
   0,
@@ -62,6 +62,7 @@ const potency_to_increase = [
   4,
   5,
 ];
+assert(potency_to_increase.length - 1 === POTENCY_MAX);
 
 let adjectives = {
   pet: [
@@ -520,9 +521,7 @@ export function main(canvas) {
       }
     }
 
-    if (!DEBUG || true) {
-      newPipes();
-    }
+    newPipes();
   }
 
 
@@ -673,6 +672,10 @@ export function main(canvas) {
         }
       }
     }
+    ret = ret.map((e) => {
+      e.count = potency_to_increase[min(potency_to_increase.length - 1, e.count)];
+      return e;
+    });
     ret = ret.filter((e) => e.count);
     return ret;
   }
@@ -1025,7 +1028,7 @@ export function main(canvas) {
     let sink = game_state.sinks[sink_idx];
     assert(pet);
     for (let ii = 0; ii < 3; ++ii) {
-      pet.value[ii] += potency_to_increase[sink.value[ii]];
+      pet.value[ii] += sink.value[ii];
     }
     game_state.sinks[sink_idx] = newSink();
     pet.fed = true;
@@ -1130,7 +1133,7 @@ export function main(canvas) {
         if (sel_pot && !pet.fed) {
           let sink = game_state.sinks[game_state.selected[1]];
           for (let jj = 0; jj < 3; ++jj) {
-            output[jj] = potency_to_increase[sink.value[jj]];
+            output[jj] = sink.value[jj];
           }
         }
         for (let jj = 0; jj < 3; ++jj) {
@@ -1185,9 +1188,6 @@ export function main(canvas) {
     }
     if (game_state.selected[0] !== order.type) {
       return false;
-    }
-    if (DEBUG) {
-      return true;
     }
     let is_pet = order.type === 'pet';
     let holder = is_pet ? 'pen' : 'sinks';

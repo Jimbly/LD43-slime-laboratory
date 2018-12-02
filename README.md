@@ -10,24 +10,33 @@ Start with: `npm start` (after running `npm i` once)
 TODO:
 * Potion order requirements are a bit high too quickly? Especially Pure of 16!
   * 10 of each (5 turns minimum) is probably a more reasonable max
-* Need more diminishing returns when feeding pets - feeding a S=8 pet a S=2 potion should not still add 2!  (Fractional, but hidden?)
-  * Or, diminishing return is when harvesting for ingredients, yeah.
-
 * High scores
 * Would be useful to see current stats of all potions (and pets) - roll over something and they all show up? Always there? Hold shift?
-* Pets grow in size after being fed?  Or their size is fixed?
 * New button and panel graphics
 * Allow selecting pet first, then food, show same tooltip
 * Daily summary if things go wrong
+
+Polish
+* Sounds / Music
+  * Sacrifice squish
+  * Brew burble
+* Pets wander when mouse not near them
+* Pets smoothly move from position to position, including from store purchase window
+* Quick animation up clicking Brew
+
+Graphics
 * Shadows under pets
 * Animate pets
-* More pet variety and size variety
-* Pets wander when mouse not near them
-* How many count taps for source values - maybe should be divided by 2, as one tap can fill all 6 bottles sometimes!
+* More pet variety and size variety - why?  Just make slimes better? and we're a Slime Slaughterer?
 * Gears or pattern in background of pipes board
 * Animate pipes rotating
-* Separate seeded random for orders for consistency
+* Separate seeded random for orders for consistency / high scores
 
+Stretch
+* Pets grow in size after being fed?  Or their size is fixed?
+
+
+Original notes:
 Alchemical Menagerie
 * Art
 ** Bottles
@@ -42,7 +51,6 @@ Alchemical Menagerie
 *** Button to clear individual taps - no, just overwrite
 *** Show how much is left in each tap
 *** Show current results
-*** Quick animation up clicking Brew
 *** Drag potions to creatures, trash, or Current Goal
 ** Creatures
 *** Drink potions, stats change
