@@ -3,6 +3,7 @@
 /*global Z: false */
 
 const assert = require('assert');
+const animation = require('./animation.js');
 const local_storage = require('./local_storage.js');
 const particle_data = require('./particle_data.js');
 const random_seed = require('random-seed');
@@ -192,6 +193,7 @@ export function main(canvas) {
   let rand;
   let rand_orders;
   let game_state;
+  let brew_anim;
 
   function typeMix(type1, type2) {
     let a = min(type1, type2);
@@ -437,6 +439,7 @@ export function main(canvas) {
     shop_up = false;
     rand = random_seed.create(DEBUG ? 6 : 3);
     rand_orders = random_seed.create(3); // 3's not bad
+    brew_anim = null;
     game_state = {
       endless: false,
       selected: null,
@@ -452,6 +455,7 @@ export function main(canvas) {
       shop: newShop(),
       next_order_type: 'pet',
       warned: {},
+      flow_render: 0,
     };
     game_state.orders.push(randomOrderProtected());
     newPipes();
@@ -569,8 +573,6 @@ export function main(canvas) {
         }
       }
     }
-
-    newPipes();
   }
 
 
@@ -890,9 +892,10 @@ export function main(canvas) {
             param.z++;
           }
         }
+        let drained = pipe.fill[0].t < game_state.drain_progress;
         param.x += sprite_size / 2;
         param.y += sprite_size / 2;
-        if (pipe.fill[0].uid && !rotating) {
+        if (pipe.fill[0].uid && !rotating && !drained) {
           param.color1 = fluid_colors[pipe.fill[0].type];
           param.color = fluid_colors_glow[pipe.fill[0].type];
         }
@@ -901,7 +904,8 @@ export function main(canvas) {
           sprites.pipes[replace].drawDualTint(param);
           param.z += 0.01;
           param.rotation += (pipe.type === 'zig') ? PI : PI / 2;
-          if (pipe.fill[1].uid && !rotating) {
+          drained = pipe.fill[1].t < game_state.drain_progress;
+          if (pipe.fill[1].uid && !rotating && !drained) {
             param.color1 = fluid_colors[pipe.fill[1].type];
             param.color = fluid_colors_glow[pipe.fill[1].type];
           } else {
@@ -1067,32 +1071,75 @@ export function main(canvas) {
     }
   }
 
-  function nextDay() {
-    doBrew();
-    let { pen } = game_state;
-    for (let ii = 0; ii < pen.length; ++ii) {
-      let pet = pen[ii];
-      if (pet.fed) {
-        pet.fed = false;
-      } else {
-        v3Max(v3Sub(pet.value, VMath.unit_vec, pet.value), VMath.zero_vec, pet.value);
-      }
-    }
-
-    if (game_state.orders.length < min(3, game_state.orders_done + 1)) {
-      if (game_state.endless || game_state.orders_done + game_state.orders.length < ORDERS_FINAL) {
-        let order = randomOrderProtected();
-        if (game_state.orders.length === 2) {
-          game_state.orders.splice(1, 0, order);
-        } else {
-          game_state.orders.push(order);
+  function animateNewPipes(t) {
+    let board_old = game_state.board;
+    newPipes();
+    let board_new = game_state.board;
+    game_state.board = board_old;
+    let pipe_fill_idx = 0;
+    t = brew_anim.add(t, 600, (progress) => {
+      game_state.drain_progress = Infinity;
+      let new_idx = progress * (PIPE_DIM + 1);
+      for (; pipe_fill_idx < min(new_idx, 6); pipe_fill_idx++) {
+        for (let ii = 0; ii < PIPE_DIM; ++ii) {
+          let pipe = board_new[pipe_fill_idx][ii];
+          game_state.board[pipe_fill_idx][ii] = pipe;
+          pipe.last_rot = (pipe.rot + 3) % 4;
+          pipe.last_rot_timer = ROT_TIME / 2 - ii * 16;
         }
       }
-    }
+    });
+    t = brew_anim.add(t, 0, () => {
+      game_state.drain_progress = 0;
+    });
+    return t;
+  }
 
-    game_state.shop = newShop();
-    game_state.mulligan = min(game_state.mulligan + 1, MULLIGAN_MAX);
-    game_state.turns++;
+  function nextDay() {
+    brew_anim = animation.create();
+
+    let t = 0;
+    let time_per_step = 120;
+    t = brew_anim.add(t, (game_state.max_fill + 1) * time_per_step, (progress) => {
+      game_state.drain_progress = progress * (game_state.max_fill + 1);
+    });
+
+    // TODO: animate the results of the brew - each potion doing a floater or
+    // zoom in, then stats change, then zoom out as the next one is zooming in
+    t = brew_anim.add(t, 0, () => {
+      doBrew();
+    });
+
+    t = brew_anim.add(t, 0, () => {
+      let { pen } = game_state;
+      for (let ii = 0; ii < pen.length; ++ii) {
+        let pet = pen[ii];
+        if (pet.fed) {
+          pet.fed = false;
+        } else {
+          v3Max(v3Sub(pet.value, VMath.unit_vec, pet.value), VMath.zero_vec, pet.value);
+        }
+      }
+
+      if (game_state.orders.length < min(3, game_state.orders_done + 1)) {
+        if (game_state.endless || game_state.orders_done + game_state.orders.length < ORDERS_FINAL) {
+          let order = randomOrderProtected();
+          if (game_state.orders.length === 2) {
+            game_state.orders.splice(1, 0, order);
+          } else {
+            game_state.orders.push(order);
+          }
+        }
+      }
+    });
+
+    t = animateNewPipes(t);
+
+    t = brew_anim.add(t, 0, () => {
+      game_state.shop = newShop();
+      game_state.mulligan = min(game_state.mulligan + 1, MULLIGAN_MAX);
+      game_state.turns++;
+    });
   }
 
   function drawStatus(dt) {
@@ -1295,7 +1342,8 @@ export function main(canvas) {
       })) {
         if (1) {
           --game_state.mulligan;
-          newPipes();
+          brew_anim = animation.create();
+          animateNewPipes(0);
         } else {
           // debug order progression
           game_state.orders_done++;
@@ -1750,7 +1798,7 @@ export function main(canvas) {
     glov_ui.menuUp();
   }
 
-  function dofill(x, y, from_dir, type, uid) {
+  function dofill(x, y, from_dir, type, uid, t) {
     if (x < 0 || y < 0 || x >= PIPE_DIM || y >= PIPE_DIM) {
       return;
     }
@@ -1800,33 +1848,43 @@ export function main(canvas) {
     }
     fill.uid = fill.uid || {};
     fill.uid[uid] = true;
+    fill.t = min(fill.t, t);
+    game_state.max_fill = max(game_state.max_fill, t);
 
     // recurse!
     for (let ii = 0; ii < fill_to.length; ++ii) {
       if (fill_to[ii] !== check) {
         let dir = (fill_to[ii] + pipe.rot) % 4;
-        dofill(x + dx[dir], y + dy[dir], (dir + 2) % 4, type, uid);
+        dofill(x + dx[dir], y + dy[dir], (dir + 2) % 4, type, uid, t + 1);
       }
     }
   }
 
   function calcFlow() {
     let { board, sources } = game_state;
+    game_state.max_fill = 0;
     for (let ii = 0; ii < board.length; ++ii) {
       let row = board[ii];
       for (let jj = 0; jj < row.length; ++jj) {
-        row[jj].fill = [{ uid: null }, { uid: null }];
+        row[jj].fill = [{ uid: null, t: Infinity }, { uid: null, t: Infinity }];
       }
     }
     for (let ii = 0; ii < sources.length; ++ii) {
       if (sources[ii] && sources[ii].count) {
-        dofill(ii, 0, TOP, sources[ii].type, ii + 1);
+        dofill(ii, 0, TOP, sources[ii].type, ii + 1, 0);
       }
     }
   }
 
   function pipes(dt) {
     draw_list.queue(sprites.game_bg, 0, 0, Z.BACKGROUND);
+
+    if (brew_anim && brew_anim.update(dt)) {
+      glov_input.eatAllInput();
+    } else {
+      brew_anim = null;
+    }
+
     calcFlow();
     let have_clicks = glov_input.clicks[0] && glov_input.clicks[0].length;
     let selected_save = game_state.selected;
