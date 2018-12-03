@@ -839,13 +839,13 @@ export function main(canvas) {
             x: x0 + sprite_size * ii,
             y: y0 - sprite_size,
             w: ((ii === sources.length - meat.length) ? meat.length : 1) * sprite_size,
-            h: sprite_size
+            h: sprite_size,
+            touch_twice: true,
           };
-          if (glov_input.clickHit(param)) {
+          let { ret } = glov_ui.buttonShared(param);
+          if (ret) {
             // TODO: Confirm modal if wasting existing souce?
             randSound(sound_meat);
-            glov_ui.setMouseOver(`source_${ii}`);
-            glov_ui.playUISound('button_click');
             for (let jj = 0; jj < meat.length; ++jj) {
               let idx = ii + jj;
               sources = game_state.sources;
@@ -858,8 +858,7 @@ export function main(canvas) {
             game_state.pen.splice(selected[1], 1);
             game_state.selected = null;
             break;
-          } else if (glov_input.isMouseOver(param)) {
-            glov_ui.setMouseOver(`source_${ii}`);
+          } else if (glov_ui.button_mouseover) {
             pet_at = ii;
             break;
           }
@@ -1455,6 +1454,7 @@ export function main(canvas) {
         tooltip: 'Advances time.  Consume 1 of any ingredient used in any potion, and add to the' +
           ' potions.  Also, any hungry pets will lose 1 of each stat.',
         tooltip_width: 1200,
+        touch_twice: true,
         disabled,
       })) {
         let { no_brew, hungry } = showBrewTooltips(dt);
@@ -1534,8 +1534,9 @@ export function main(canvas) {
         tooltip: `Generate a new layout of pipes in your alchemical workshop.  You can do this ${game_state.mulligan}` +
           ' times, and once more every Brew.',
         tooltip_width: 1200,
+        touch_twice: true,
       })) {
-        if (!DEBUG) {
+        if (!DEBUG || true) {
           --game_state.mulligan;
           brew_anim = animation.create();
           animateNewPipes(0);
@@ -1554,6 +1555,7 @@ export function main(canvas) {
         tooltip: 'Spend GP to buy new pets',
         tooltip_width: 700,
         disabled,
+        no_touch_mouseover: true,
       })) {
         // display shop
         shop_up = true;
@@ -1565,6 +1567,7 @@ export function main(canvas) {
       y: game_height - glov_ui.button_height,
       text: 'i',
       w: glov_ui.button_height,
+      no_touch_mouseover: true,
     })) {
       tooltips_on_toggle = !tooltips_on_toggle;
     }
@@ -1644,11 +1647,15 @@ export function main(canvas) {
       let selected = 0;
       let over = false;
       let selectable = sink_selected || !game_state.selected && meatFromPet(pet).length;
-      if (selectable && glov_input.clickHit(param)) {
+      if (sink_selected) {
+        param.touch_twice = true;
+      }
+      param.key = `pet_${ii}`;
+      let clicked = glov_ui.buttonShared(param).ret;
+      if (selectable && clicked) {
         if (sink_selected && pet.fed) {
-          // do not allow
+          // do not allow, but still eat the click
         } else {
-          glov_ui.playUISound('select');
           over = true;
           selected = 1;
           if (sink_selected) {
@@ -1680,7 +1687,7 @@ export function main(canvas) {
           need_sort = true;
         }
       }
-      if (glov_input.isMouseOver(param)) {
+      if (glov_ui.button_mouseover) {
         over = true;
         if (selectable && !selected) {
           selected = 0.5;
@@ -1713,9 +1720,6 @@ export function main(canvas) {
         color: v4Build(1, 1, 1, 0.75),
       });
 
-      if (over) {
-        glov_ui.setMouseOver(pet);
-      }
       if (over || tooltips_on) {
         let tooltip_w = 400;
         let pad = 16;
@@ -1768,7 +1772,7 @@ export function main(canvas) {
           tooltip_y += font_size;
         } else if (sel_pot) {
           font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER, tooltip_w, 0,
-            'Click to feed.');
+            `${glov_input.mousePosIsTouch() ? 'Tap again' : 'Click'} to feed.`);
           tooltip_y += font_size;
         } else if (!pet.fed) {
           font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER, tooltip_w, 0,
@@ -2382,7 +2386,9 @@ export function main(canvas) {
       doHelp();
     }
 
-    if (glov_ui.buttonText({ x: 20, y: 20, text: 'Menu', disabled: menu_up, button_width: 200 }) && !menu_up) {
+    if (glov_ui.buttonText({
+      x: 20, y: 20, text: 'Menu', disabled: menu_up, button_width: 200, no_touch_mouseover: true
+    }) && !menu_up) {
       menu_up = true;
     }
 
@@ -2399,7 +2405,7 @@ export function main(canvas) {
     drawStatus(dt);
     drawOrders(dt);
 
-    if (game_state.selected && game_state.selected === selected_save && have_clicks) {
+    if (game_state.selected && game_state.selected === selected_save && have_clicks && !glov_ui.touch_changed_focus) {
       game_state.selected = null;
     }
   }
