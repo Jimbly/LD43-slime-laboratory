@@ -166,6 +166,7 @@ export function main(canvas) {
   const font = glov_engine.font;
 
   glov_ui.scaleSizes(2560 / 1280);
+  glov_ui.button_height *= 1.5;
   glov_ui.panel_pixel_scale = 1;
   glov_ui.color_panel = v4Build(1, 1, 1, 1);
 
@@ -1430,12 +1431,13 @@ export function main(canvas) {
 
   function drawButtons(dt) {
     let w = 310;
+    let y0 = 1360 - 20;
     let disabled = brew_anim ? true : false;
     if (game_state.selected) {
       if (game_state.selected[0] === 'potion') {
         if (glov_ui.buttonText({
           x: 1440 + (2400 - 1440 - w) / 2,
-          y: 1360,
+          y: y0,
           text: 'Empty Potion',
           w,
           tooltip: 'Empty the currently selected potion, gaining nothing.  Why would you do this?',
@@ -1447,7 +1449,7 @@ export function main(canvas) {
     } else {
       if (glov_ui.buttonText({
         x: 1440,
-        y: 1360,
+        y: y0,
         text: 'Brew!',
         w,
         tooltip: 'Advances time.  Consume 1 of any ingredient used in any potion, and add to the' +
@@ -1525,7 +1527,7 @@ export function main(canvas) {
       }
       if (glov_ui.buttonText({
         x: 1440 + (2400 - 1440 - w) / 2,
-        y: 1360,
+        y: y0,
         text: `New Pipes (${game_state.mulligan})`,
         w,
         disabled: !game_state.mulligan || disabled,
@@ -1546,7 +1548,7 @@ export function main(canvas) {
       }
       if (glov_ui.buttonText({
         x: 2400 - w,
-        y: 1360,
+        y: y0,
         text: 'Shop',
         w,
         tooltip: 'Spend GP to buy new pets',
@@ -1559,8 +1561,8 @@ export function main(canvas) {
     }
 
     if (glov_ui.buttonText({
-      x: game_width - glov_ui.button_height * 2,
-      y: game_height - glov_ui.button_height * 2,
+      x: game_width - glov_ui.button_height - 8,
+      y: game_height - glov_ui.button_height,
       text: 'i',
       w: glov_ui.button_height,
     })) {
