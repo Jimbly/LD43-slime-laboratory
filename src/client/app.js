@@ -2153,37 +2153,43 @@ export function main(canvas) {
         },
         x: x + (width - glov_ui.button_width) / 2,
         y, z,
-        items: [
-          {
-            name: 'Reset Game',
-            cb: () => newGame(),
-          },
-          {
-            name: 'Help',
-            cb: () => {
-              help_up = true;
-            }
-          }, {
-            name: 'High Scores',
-            cb: () => {
-              score_system.updateHighScores(function () {
-                have_scores = true;
-              });
-              high_scores_up = true;
-            }
-          },
-          {
-            name: 'Continue Game',
-            exit: true,
-          }
-        ],
       });
     }
 
-    y += esc_menu.run();
+    y += esc_menu.run({
+      items: [
+        {
+          name: 'Reset Game',
+          cb: () => newGame(),
+        },
+        {
+          name: 'Help',
+          cb: () => {
+            help_up = true;
+          }
+        }, {
+          name: 'High Scores',
+          cb: () => {
+            score_system.updateHighScores(function () {
+              have_scores = true;
+            });
+            high_scores_up = true;
+          }
+        }, {
+          name: `Sound: ${sound_manager.sound_on ? 'ON' : 'OFF'}`,
+          cb: () => {
+            sound_manager.sound_on = !sound_manager.sound_on;
+          },
+          tag: 'sound',
+        }, {
+          name: 'Continue Game',
+          exit: true,
+        }
+      ],
+    });
     y += pad;
 
-    if (esc_menu.isSelected()) {
+    if (esc_menu.isSelected() && !esc_menu.isSelected('sound')) {
       menu_up = false;
       glov_ui.focusCanvas(); // don't auto-focus chat box
     }
