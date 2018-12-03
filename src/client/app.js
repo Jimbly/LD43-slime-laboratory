@@ -157,6 +157,7 @@ export function main(canvas) {
   });
 
   const sound_manager = glov_engine.sound_manager;
+  sound_manager.auto_mp3s = true;
   const glov_camera = glov_engine.glov_camera;
   const glov_input = glov_engine.glov_input;
   const glov_sprite = glov_engine.glov_sprite;
