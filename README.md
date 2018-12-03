@@ -3,7 +3,7 @@ Ludum Dare 43 - Sacrifices Must Be Made
 
 LD43 Entry by Jimbly - "Slime Laboratory"
 
-* Using [Javascript libGlov/GLOV.js framework](https://github.com/Jimbly/turbulenz-playground)
+* Using [Javascript libGlov/GLOV.js framework](https://github.com/Jimbly/glovjs-playground)
 
 Start with: `npm start` (after running `npm i` once)
 
