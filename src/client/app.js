@@ -270,7 +270,7 @@ export function main(canvas) {
 
   function newSink() {
     return {
-      value: v3Build(15, 16, 0),
+      value: v3Build(0, 0, 0),
       offset: Math.random() * 16, // visual random, do not use seed
     };
   }
