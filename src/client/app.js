@@ -8,7 +8,8 @@ const local_storage = require('./local_storage.js');
 const particle_data = require('./particle_data.js');
 const random_seed = require('random-seed');
 
-const { v2Build, v3Add, v3Build, v3BuildZero, v3Equal, v3Lerp, v3Max, v3Min, v3Sub, v4Build } = VMath;
+const { v2Build, v2BuildZero, v2Copy, v2Lerp } = VMath;
+const { v3Add, v3Build, v3BuildZero, v3Equal, v3Lerp, v3Max, v3Min, v3Sub, v4Build } = VMath;
 const { abs, ceil, min, max, round, sin, PI } = Math;
 const { clamp, defaults, merge, clone, titleCase, lerp, easeInOut } = require('../common/util.js');
 
@@ -41,11 +42,10 @@ const PEN_Y0 = 320;
 const PEN_W = 1120;
 const PEN_H = 944;
 const sprite_size = 160;
-const PET_SIZE = sprite_size;
 const MULLIGAN_MAX = 3;
 const POTENCY_MAX = 16;
 const ORDERS_FINAL = 10;
-const ROT_TIME = 500;
+const ROT_TIME = 300;
 
 const DRAIN_TIME_PER_STEP = DEBUG ? 60 : 120;
 
@@ -127,9 +127,7 @@ const PIPE_DIST = [
   'merge',
 ];
 
-const SPECIES = [
-  'slime',
-];
+const SPECIES = ['slime'];
 
 let menu_up = false;
 let high_scores_up = false;
@@ -272,7 +270,7 @@ export function main(canvas) {
 
   function newSink() {
     return {
-      value: v3Build(0, 0, 0),
+      value: v3Build(15, 16, 0),
       offset: Math.random() * 16, // visual random, do not use seed
     };
   }
@@ -458,20 +456,32 @@ export function main(canvas) {
     });
   }
 
+  function petWidth(pet) {
+    return (1 + 0.5 * (pet.size - 1)) * sprite_size;
+  }
+  function petHeight(pet) {
+    return (1 + 0.5 * (pet.size - 1)) * sprite_size;
+  }
+
   function newPet(data) {
     let order = [0,1,2,6];
     randomizeArray(order);
-    return {
+    let pet = {
       size: data.size,
       value: data.value,
       species: data.species,
       order,
       pos: v2Build(
-        PEN_X0 + rand(PEN_W - PET_SIZE * data.size),
-        PEN_Y0 + rand(PEN_H - PET_SIZE)
+        PEN_X0 + rand(PEN_W - petWidth(data)),
+        PEN_Y0 + rand(PEN_H - petHeight(data))
       ),
+      last_pos: v2BuildZero(),
+      last_pos_timer: 0,
+      last_pos_transit_time: 0,
       fed: true,
     };
+    v2Copy(pet.pos, pet.last_pos);
+    return pet;
   }
 
   function sortPens() {
@@ -544,13 +554,6 @@ export function main(canvas) {
       game_state.warned.always_hungry = true;
       game_state.warned.always_brew = true;
     }
-  }
-
-  function petWidth(pet) {
-    return (1 + 0.5 * (pet.size - 1)) * sprite_size;
-  }
-  function petHeight(pet) {
-    return (1 + 0.5 * (pet.size - 1)) * sprite_size;
   }
 
   function calcBrew() {
@@ -681,6 +684,8 @@ export function main(canvas) {
     });
 
     sprites.spike_highlight = createSpriteSimple('spike_highlight.png', 960, 240, origin_0_0);
+
+    sprites.pet_shadow = createSpriteSimple('pet_shadow.png', 167, 86, {});
 
     sprites.meat = createSpriteSimple('meat', sprite_size, sprite_size, params_square);
 
@@ -839,20 +844,23 @@ export function main(canvas) {
     for (let ii = 0; ii < sources.length; ++ii) {
       let s = sources[ii];
       if (s) {
+        let z = Z.SPRITES;
         let color = fluid_colors[s.type];
+        let text_color = 0x00000040;
         if (s.predict) {
           color = v4Build(color[0], color[1], color[2], 0.5);
+          z = Z.DRAG + 10;
+          text_color = 0x000000A0;
         }
         let param = {
           x: x0 + sprite_size * ii + sprite_size / 2,
           y: y0 - sprite_size / 2,
-          z: Z.SPRITES,
+          z,
           color: color,
           color1: fluid_colors_glow[s.type],
           size: [1, 1],
         };
         sprites.meat.drawDualTint(param);
-        let text_color = 0x00000040;
         if (glov_input.isMouseOver({
           x: param.x - sprite_size / 2,
           y: param.y - sprite_size / 2,
@@ -1004,6 +1012,10 @@ export function main(canvas) {
     let x_mid = x0 + sprite_size * ii + sprite_size / 2;
     let y0 = 1120 + sprite_size / 6 - (scale - 1) * (48 * 3);
     let style = glov_font.styleColored(null, 0x00000000 | (alpha * 255));
+    let style_max = glov_font.style(style, {
+      outline_width: 3,
+      outline_color: 0xFFFF80ff,
+    });
     let size = 48 * scale;
     let y = y0;
     let output = brew[ii] ? output_from_type[brew[ii].type] : [0,0,0];
@@ -1028,7 +1040,7 @@ export function main(canvas) {
             v = clamp(v, 0, POTENCY_MAX);
             d -= dd;
           }
-          font.drawSizedAligned(style, x_mid - size_offs, y, Z.TOOLTIP, size, glov_font.ALIGN.HFIT, w / 2 + size_offs - 12, 0,
+          font.drawSizedAligned(v === POTENCY_MAX ? style_max : style, x_mid - size_offs, y, Z.TOOLTIP, size, glov_font.ALIGN.HFIT, w / 2 + size_offs - 12, 0,
             `${v} ${d ? `${output[jj] > 0 ? '+' : '-'}${abs(d)}` : ''}`);
         } else {
           font.drawSized(style, x_mid, y, Z.TOOLTIP, size,
@@ -1149,13 +1161,18 @@ export function main(canvas) {
         let z = Z.TOOLTIP;
         let font_size = 48;
         let style = glov_font.styleColored(null, 0x000000ff);
+        let style_max = glov_font.style(style, {
+          outline_width: 3,
+          outline_color: 0xFFFF80ff,
+        });
         font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER, tooltip_w, 0,
           type < 0 ? 'Empty Potion' : `Potion of ${adjectives.potion[type]}`);
         tooltip_y += font_size;
         let output = brew[ii] ? output_from_type[brew[ii].type] : [0,0,0];
         for (let jj = 0; jj < 3; ++jj) {
           if (b.value[jj] || output[jj]) {
-            let font_w = font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER,
+            let font_w = font.drawSizedAligned(b.value[jj] === POTENCY_MAX ? style_max : style, tooltip_x, tooltip_y, z,
+              font_size, glov_font.ALIGN.HCENTER,
               tooltip_w, 0, `  = ${b.value[jj]}${output[jj] ? ` ${output[jj] > 0 ? '(+' : '('}${output[jj]})` : ''}`);
             let icon_size = font_size;
             sprites.icons.draw({
@@ -1223,9 +1240,9 @@ export function main(canvas) {
     });
 
 
-    const TIME_BREW_FADE_IN = 500;
-    const TIME_BREW_BLEND = 1000;
-    const TIME_BREW_FADE_OUT = 500;
+    const TIME_BREW_FADE_IN = 250;
+    const TIME_BREW_BLEND = 800;
+    const TIME_BREW_FADE_OUT = 250;
     let brew = calcBrew();
     function fadeInSink(idx, progress) {
       game_state.sinks[idx].blend = 0;
@@ -1554,6 +1571,18 @@ export function main(canvas) {
     let need_sort = false;
     for (let ii = 0; ii < pen.length; ++ii) {
       let pet = pen[ii];
+
+      let pos = pet.pos;
+      if (pet.last_pos_transit_time) {
+        pet.last_pos_timer += dt;
+        if (pet.last_pos_timer >= pet.last_pos_transit_time) {
+          pet.last_pos_transit_time = 0;
+        } else {
+          let t = easeInOut(pet.last_pos_timer / pet.last_pos_transit_time, 2);
+          pos = v2Lerp(pet.last_pos, pet.pos, t);
+        }
+      }
+
       let alpha = 1;
       if (isSelected('pet', ii)) {
         let mpos = glov_input.mousePos();
@@ -1566,22 +1595,27 @@ export function main(canvas) {
           size: [960, 240],
         });
       }
-      let param = drawPet(pet, pet.pos[0], pet.pos[1], Z.SPRITES + pen.length - ii, alpha);
+      let z = Z.SPRITES + pen.length - ii;
+      let param = drawPet(pet, pos[0], pos[1], z, alpha);
       let type = param.type;
 
       let selected = 0;
       let over = false;
-      let selectable = sink_selected && !pet.fed || !game_state.selected && meatFromPet(pet).length;
+      let selectable = sink_selected || !game_state.selected && meatFromPet(pet).length;
       if (selectable && glov_input.clickHit(param)) {
-        glov_ui.playUISound('select');
-        over = true;
-        selected = 1;
-        if (sink_selected) {
-          // Feed them!
-          feedPet(ii, game_state.selected[1]);
-          game_state.selected = null;
+        if (sink_selected && pet.fed) {
+          // do not allow
         } else {
-          game_state.selected = ['pet', ii];
+          glov_ui.playUISound('select');
+          over = true;
+          selected = 1;
+          if (sink_selected) {
+            // Feed them!
+            feedPet(ii, game_state.selected[1]);
+            game_state.selected = null;
+          } else {
+            game_state.selected = ['pet', ii];
+          }
         }
       } else if (isSelected('pet', ii)) {
         selected = 0.75;
@@ -1594,9 +1628,13 @@ export function main(canvas) {
         let mpos;
         if ((mpos = glov_input.clickHit(pen_param))) {
           game_state.selected = null;
-          pet.pos[0] = min(max(PEN_X0, mpos[0] - petWidth(pet) / 2),
+          v2Copy(pet.pos, pet.last_pos);
+          pet.last_pos_timer = 0;
+          pet.last_pos_transit_time = 1000;
+          pet.pos[0] = min(max(PEN_X0, mpos[0] - param.w / 2),
             PEN_X0 + PEN_W - petWidth(pet));
-          pet.pos[1] = min(max(PEN_Y0, mpos[1] - petHeight(pet) / 2), PEN_Y0 + PEN_H - sprite_size);
+          pet.pos[1] = min(max(PEN_Y0 - param.h / 2, mpos[1] - param.h / 2), PEN_Y0 + PEN_H - param.h);
+
           need_sort = true;
         }
       }
@@ -1624,7 +1662,14 @@ export function main(canvas) {
           sprites.pet_select[1/*pet.size*/].draw(param);
         }
       }
-
+      param.z -= 0.5;
+      sprites.pet_shadow.draw({
+        x: param.x + param.w / 2,
+        y: param.y + param.h * 0.9,
+        z: param.z,
+        size: [param.w, param.w * 86 / 167],
+        color: v4Build(1, 1, 1, 0.75),
+      });
 
       if (over) {
         glov_ui.setMouseOver(pet);
@@ -1653,19 +1698,23 @@ export function main(canvas) {
             output[jj] = sink.value[jj];
           }
         }
-        for (let jj = 0; jj < 3; ++jj) {
-          if (pet.value[jj] || output[jj]) {
-            let font_w = font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER,
-              tooltip_w, 0, `  = ${pet.value[jj]}${output[jj] ? ` ${output[jj] > 0 ? '(+' : '('}${output[jj]})` : ''}`);
-            let icon_size = font_size;
-            sprites.icons.draw({
-              x: tooltip_x + (tooltip_w - font_w + font_size) / 2 - icon_size,
-              y: tooltip_y,
-              z: z + 1,
-              size: [icon_size, icon_size],
-              frame: jj,
-            });
-            tooltip_y += font_size;
+        if (sel_pot && pet.fed) {
+          // do not show stats
+        } else {
+          for (let jj = 0; jj < 3; ++jj) {
+            if (pet.value[jj] || output[jj]) {
+              let font_w = font.drawSizedAligned(style, tooltip_x, tooltip_y, z, font_size, glov_font.ALIGN.HCENTER,
+                tooltip_w, 0, `  = ${pet.value[jj]}${output[jj] ? ` ${output[jj] > 0 ? '(+' : '('}${output[jj]})` : ''}`);
+              let icon_size = font_size;
+              sprites.icons.draw({
+                x: tooltip_x + (tooltip_w - font_w + font_size) / 2 - icon_size,
+                y: tooltip_y,
+                z: z + 1,
+                size: [icon_size, icon_size],
+                frame: jj,
+              });
+              tooltip_y += font_size;
+            }
           }
         }
         if (sel_pot && pet.fed) {
@@ -1919,7 +1968,10 @@ export function main(canvas) {
       })) {
         game_state.shop[ii] = null;
         game_state.gp -= 1;
-        game_state.pen.push(newPet(pet));
+        let new_pet = newPet(pet);
+        new_pet.last_pos_transit_time = 1500;
+        v2Build(param.x, param.y, new_pet.last_pos);
+        game_state.pen.push(new_pet);
         sortPens();
       }
       y += glov_ui.button_height;

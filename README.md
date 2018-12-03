@@ -13,10 +13,8 @@ Polish
   * Sacrifice squish
   * Brew burble
 * Pets wander when mouse not near them
-* Pets smoothly move from position to position, including from store purchase window
 
 Graphics
-* Shadows under pets
 * Animate pets
 * More pet variety and size variety - why?  Just make slimes better? and we're a Slime Slaughterer?
 * Gears or pattern in background of pipes board
