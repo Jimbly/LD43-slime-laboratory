@@ -8,10 +8,6 @@ LD43 Entry by Jimbly - "Slime Laboratory"
 Start with: `npm start` (after running `npm i` once)
 
 Polish
-* Tutorial or more instruction - Help button with flow-chart?
-* Sounds / Music
-  * Sacrifice squish
-  * Brew burble
 * Pets wander when mouse not near them
 
 Graphics

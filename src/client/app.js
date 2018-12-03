@@ -131,6 +131,7 @@ const SPECIES = ['slime'];
 
 let menu_up = false;
 let high_scores_up = false;
+let help_up = !DEBUG;
 
 export function main(canvas) {
   const glov_engine = require('./glov/engine.js');
@@ -621,11 +622,44 @@ export function main(canvas) {
     }
   }
 
+  const sound_meat = [
+    'crunch1',
+    'crunch2',
+    'crunch3',
+  ];
+  const sound_pour = [
+    'pour1',
+    'pour2',
+    'pour3',
+    'pour4',
+    'pour5',
+  ];
+  const sound_drink = [
+    'drink1',
+    'drink2',
+  ];
+  const sound_order = [
+    'order1',
+    'order2',
+  ];
+  const sound_misc = [
+    'empty',
+    'buy'
+  ];
+
+  function randSound(list) {
+    let idx = Math.floor(Math.random() * list.length);
+    sound_manager.play(list[idx]);
+  }
 
   function initGraphics() {
     glov_sprite.preloadParticleData(particle_data);
 
-    // sound_manager.loadSound('test');
+    sound_meat.forEach((name) => sound_manager.loadSound(name));
+    sound_pour.forEach((name) => sound_manager.loadSound(name));
+    sound_drink.forEach((name) => sound_manager.loadSound(name));
+    sound_order.forEach((name) => sound_manager.loadSound(name));
+    sound_misc.forEach((name) => sound_manager.loadSound(name));
 
     const origin_0_0 = glov_sprite.origin_0_0;
 
@@ -686,6 +720,7 @@ export function main(canvas) {
     sprites.spike_highlight = createSpriteSimple('spike_highlight.png', 960, 240, origin_0_0);
 
     sprites.pet_shadow = createSpriteSimple('pet_shadow.png', 167, 86, {});
+    sprites.help = createSpriteSimple('help.png', 1496, 1218, {});
 
     sprites.meat = createSpriteSimple('meat', sprite_size, sprite_size, params_square);
 
@@ -806,6 +841,7 @@ export function main(canvas) {
           };
           if (glov_input.clickHit(param)) {
             // TODO: Confirm modal if wasting existing souce?
+            randSound(sound_meat);
             glov_ui.setMouseOver(`source_${ii}`);
             glov_ui.playUISound('button_click');
             for (let jj = 0; jj < meat.length; ++jj) {
@@ -1222,6 +1258,7 @@ export function main(canvas) {
   }
 
   function nextDay() {
+    randSound(sound_pour);
     brew_anim = animation.create();
 
     let t = 0;
@@ -1402,6 +1439,7 @@ export function main(canvas) {
           w,
           tooltip: 'Empty the currently selected potion, gaining nothing.  Why would you do this?',
         })) {
+          sound_manager.play('empty');
           game_state.sinks[game_state.selected[1]] = newSink();
         }
       }
@@ -1494,7 +1532,7 @@ export function main(canvas) {
           ' times, and once more every Brew.',
         tooltip_width: 1200,
       })) {
-        if (1) {
+        if (!DEBUG) {
           --game_state.mulligan;
           brew_anim = animation.create();
           animateNewPipes(0);
@@ -1532,6 +1570,7 @@ export function main(canvas) {
   }
 
   function feedPet(pet_idx, sink_idx) {
+    randSound(sound_drink);
     let pet = game_state.pen[pet_idx];
     let sink = game_state.sinks[sink_idx];
     assert(pet);
@@ -1749,6 +1788,7 @@ export function main(canvas) {
   }
 
   function fulfillOrder(order_idx) {
+    randSound(sound_order);
     let order = game_state.orders[order_idx];
     let is_pet = order.type === 'pet';
     if (is_pet) {
@@ -1966,6 +2006,7 @@ export function main(canvas) {
         text: 'Buy',
         disabled: game_state.gp < 1,
       })) {
+        sound_manager.play('buy');
         game_state.shop[ii] = null;
         game_state.gp -= 1;
         let new_pet = newPet(pet);
@@ -2118,6 +2159,11 @@ export function main(canvas) {
             cb: () => newGame(),
           },
           {
+            name: 'Help',
+            cb: () => {
+              help_up = true;
+            }
+          }, {
             name: 'High Scores',
             cb: () => {
               score_system.updateHighScores(function () {
@@ -2150,6 +2196,29 @@ export function main(canvas) {
       h: y - y0,
     });
 
+    glov_ui.menuUp();
+  }
+
+  function doHelp(dt) {
+    sprites.help.draw({
+      x: game_width / 2,
+      y: game_height / 2,
+      z: Z.MODAL + 1,
+      size: v2Build(game_height / 1218 * 1496, game_height),
+    });
+    let param = {
+      x: 0,
+      y: 0,
+      z: Z.MODAL,
+      w: game_width,
+      h: game_height,
+      size: v2Build(game_width, game_height),
+      color: v4Build(0, 0, 0, 1),
+    };
+    sprites.white.draw(param);
+    if (glov_input.clickHit(param)) {
+      help_up = false;
+    }
     glov_ui.menuUp();
   }
 
@@ -2278,11 +2347,12 @@ export function main(canvas) {
     let have_clicks = glov_input.clicks[0] && glov_input.clicks[0].length;
     let selected_save = game_state.selected;
 
-    if (menu_up || high_scores_up || shop_up) {
+    if (menu_up || high_scores_up || shop_up || help_up) {
       if (glov_input.keyDownHit(key_codes.ESCAPE) || glov_input.padDownHit(pad_codes.START)) {
         menu_up = false;
         high_scores_up = false;
         shop_up = false;
+        help_up = false;
         glov_ui.focusCanvas();
       }
     }
@@ -2297,6 +2367,10 @@ export function main(canvas) {
 
     if (high_scores_up) {
       doHighScores(dt);
+    }
+
+    if (help_up) {
+      doHelp();
     }
 
     if (glov_ui.buttonText({ x: 20, y: 20, text: 'Menu', disabled: menu_up, button_width: 200 }) && !menu_up) {
