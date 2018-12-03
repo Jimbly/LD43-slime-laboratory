@@ -479,10 +479,6 @@ class GlovUI {
       h: y - y0,
     });
 
-    this.draw_list.queue(this.sprites.white, this.camera.x0(), this.camera.y0(), Z.MODAL - 2,
-      this.color_modal_darken,
-      [game_width, this.camera.y1() - this.camera.y0(), 1, 1]);
-
     glov_input.eatAllInput();
     this.modal_stealing_focus = true;
   }
@@ -531,12 +527,28 @@ class GlovUI {
     }
     this.dom_elems_issued = 0;
 
+    let pp_this_frame = false;
     if (this.modal_dialog || this.menu_up) {
       // Effects during modal dialogs, may need option to disable or customize these
-      glov_engine.queueFrameEffect(Z.MODAL - 2, doBlurEffect);
-      glov_engine.queueFrameEffect(Z.MODAL - 1, doDesaturateEffect);
+      this.draw_list.queue(this.sprites.white, this.camera.x0(), this.camera.y0(), Z.MODAL - 2,
+        this.color_modal_darken,
+        [this.camera.x1() - this.camera.x0(), this.camera.y1() - this.camera.y0(), 1, 1]);
+      if (glov_engine.postprocessing) {
+        glov_engine.queueFrameEffect(Z.MODAL - 2, doBlurEffect);
+        glov_engine.queueFrameEffect(Z.MODAL - 1, doDesaturateEffect);
+        pp_this_frame = true;
+      }
     }
     this.menu_up = false;
+
+    if (!glov_engine.is_loading && glov_engine.getFrameDtActual() > 250 && pp_this_frame) {
+      this.bad_frames = (this.bad_frames || 0) + 1;
+      if (this.bad_frames >= 3) { // 3 in a row, disable superfluous postprocessing
+        glov_engine.postprocessingAllow(false);
+      }
+    } else if (this.bad_frames) {
+      this.bad_frames = 0;
+    }
 
     if (this.modal_dialog) {
       this.modalDialogRun(this.modal_dialog);

@@ -2403,6 +2403,9 @@ export function main(canvas) {
   }
 
   function pipesInit(dt) {
+    if (DEBUG) {
+      glov_engine.postprocessingAllow(true); // Reset this, the help screen will re-detect it
+    }
     score_system.updateHighScores(function () {
       have_scores = true;
     });
