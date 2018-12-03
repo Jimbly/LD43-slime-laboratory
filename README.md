@@ -7,8 +7,7 @@ LD43 Entry by Jimbly - "Slime Laboratory"
 
 Start with: `npm start` (after running `npm i` once)
 
-TODO:
-* Better touch handling of mouseover stuff
+TODO
 
 Polish
 * Pets wander when mouse not near them
