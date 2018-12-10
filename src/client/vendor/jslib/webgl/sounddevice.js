@@ -404,7 +404,18 @@ var WebGLSoundSource = (function () {
     function WebGLSoundSource() {
     }
     // Public API
-    WebGLSoundSource.prototype.play = function (sound, seek) {
+    WebGLSoundSource.prototype.play = function (sound, seek, on_resume) {
+        // JE: Auto-resume
+        this.sd.resume();
+        if (sound.buffer && !this.sd.audio_context_resumed) {
+          // JE: Don't queue up a bunch of plays when device is not resumed
+          // TODO: Only play if music, then it'll auto-play on resume
+          if (on_resume) {
+            this.sd.play_on_resume = [this, sound];
+          }
+          return;
+        }
+
         if (seek === undefined) {
             seek = 0;
         }
@@ -1324,6 +1335,20 @@ var WebGLSoundDevice = (function () {
         WebGLSoundSource.prototype.audioContext = null;
     };
 
+    WebGLSoundDevice.prototype.resume = function () {
+      var sd = this;
+      if (!sd.audio_context_resumed && sd.audioContext && sd.audioContext.resume) {
+        sd.audioContext.resume().then(function () {
+          sd.audio_context_resumed = true;
+          // If there was a background sound queued up, play it upon resume
+          if (sd.play_on_resume) {
+            sd.play_on_resume[0].play(sd.play_on_resume[1]);
+            sd.play_on_resume = null;
+          }
+        });
+      }
+    };
+
     WebGLSoundDevice.create = function (params) {
         var sd = new WebGLSoundDevice();
 
@@ -1537,6 +1562,8 @@ var WebGLSoundDevice = (function () {
         sd.supportedExtensions = supportedExtensions;
 
         audio = null;
+
+        sd.resume();
 
         return sd;
     };
