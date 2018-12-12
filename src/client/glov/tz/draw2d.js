@@ -13,6 +13,7 @@ assert:false
 */
 
 const util = require('../../../common/util.js');
+const opengl = require('./opengl.js');
 
 //
 // Draw2DGroup. Wraps vertex buffer data with pairings of indices and textures
@@ -139,9 +140,10 @@ export class Draw2DSprite {
   }
 
   //
-  // Assumption is that user will not be performing these actions frequently.
-  // To that end, we provide a function which performs the ssary side effects
-  // on call, to prevent an overhead for lazy evaluation.
+  // Assumption is that user will not be performing these actions
+  // frequently.  To that end, we provide a function which performs
+  // the necessary side effects on call, to prevent an overhead for
+  // lazy evaluation.
   //
   getTextureRectangle(dst) {
     if (dst === undefined) {
@@ -199,6 +201,21 @@ export class Draw2DSprite {
     data[9] = color[1];
     data[10] = color[2];
     data[11] = color[3];
+  }
+
+  setColorRGB(r, g, b) {
+    let data = this.data;
+    data[8] = r;
+    data[9] = g;
+    data[10] = b;
+  }
+
+  getAlpha() {
+    return this.data[11];
+  }
+
+  setAlpha(alpha) {
+    this.data[11] = alpha;
   }
 
   getTextures() {
@@ -353,13 +370,13 @@ export class Draw2DSprite {
     let cy = data[26] = (T3 * x + T4 * y);
 
     // Recompute locally defined position of top-left vertex relative to center of sprite.
-    x = -data[17];
-    y = -data[18];
+    x = -data[17]; // x = -width/2
+    y = -data[18]; // y = -height/2
     let ux = data[27] = (T1 * x + T2 * y);
     let uy = data[28] = (T3 * x + T4 * y);
 
     // Recompute locally defined position of top-right vertex relative to center of sprite.
-    x = -x;
+    x = -x; // x = width / 2
     let vx = data[29] = (T1 * x + T2 * y);
     let vy = data[30] = (T3 * x + T4 * y);
 
@@ -414,7 +431,7 @@ export class Draw2DSprite {
     //
     // We permit a half pixel movement to be considered a 'true' movement.
     // Squared rotation required to impart this movement on furthest vertex is
-    data[37] = (0.25 / r1);
+    data[37] = (0.25 / r1); // squared epsilon
   }
 
   // Method for internal use only.
@@ -426,47 +443,47 @@ export class Draw2DSprite {
 
     // Check if rotation has been modified
     x = this.rotation;
-    y = x - data[16];
+    y = x - data[16]; // y = rotation - previousRotation
     if ((y * y) > (data[37] * angleScaleFactor)) {
-      data[16] = x;
+      data[16] = x; //previousRotation = rotation
       u = Math.cos(x);
       v = Math.sin(x);
 
       // rotate locally defined vectors.
       x = data[25];
       y = data[26];
-      data[31] = (u * x - v * y);
-      data[32] = (v * x + u * y);
+      data[31] = (u * x - v * y); // (px) = [cos -sin] (cx)
+      data[32] = (v * x + u * y); // (py) = [sin  cos] (cy)
 
       x = data[27];
       y = data[28];
-      data[33] = (u * x - v * y);
-      data[34] = (v * x + u * y);
+      data[33] = (u * x - v * y); // (x1) = [cos -sin] (ux)
+      data[34] = (v * x + u * y); // (y1) = [sin  cos] (uy)
 
       x = data[29];
       y = data[30];
-      data[35] = (u * x - v * y);
-      data[36] = (v * x + u * y);
+      data[35] = (u * x - v * y); // (x2) = [cos -sin] (vx)
+      data[36] = (v * x + u * y); // (y2) = [sin  cos] (vy)
     }
 
     // Compute center of this sprite in screen space.
-    u = this.x + data[31];
-    v = this.y + data[32];
+    u = this.x + data[31]; // u = centerX = positionX + px
+    v = this.y + data[32]; // v = centerY = positionY + py
 
     // Compute vertex positions in screen space.
     x = data[33];
     y = data[34];
-    data[0] = u + x;
-    data[1] = v + y;
-    data[6] = u - x;
-    data[7] = v - y;
+    data[0] = u + x; // v1x = centerX + x1
+    data[1] = v + y; // v1y = centerY + y1
+    data[6] = u - x; // v4x = centerX - x1
+    data[7] = v - y; // v4y = centerY - y1
 
     x = data[35];
     y = data[36];
-    data[2] = u + x;
-    data[3] = v + y;
-    data[4] = u - x;
-    data[5] = v - y;
+    data[2] = u + x; // v2x = centerX + x2
+    data[3] = v + y; // v2y = centerY + y2
+    data[4] = u - x; // v3x = centerX - x2
+    data[5] = v - y; // v3y = centerY - y2
   }
 }
 
@@ -1150,6 +1167,7 @@ Draw2D.prototype.uploadBuffer = function (group, count, offset) {
 
   let performanceData = this.performanceData;
 
+  // Resize buffers.
   if (count > vertexBufferParameters.numVertices) {
     let newSize = this.bufferSizeAlgorithm(count, this.gpuStride);
     if (newSize > this.maxVertices) {
@@ -1162,7 +1180,7 @@ Draw2D.prototype.uploadBuffer = function (group, count, offset) {
 
     // 32 bytes per vertex.
     // 2 bytes per index, 1.5 indices per vertex.
-    performanceData.gpuMemoryUsage = newSize * 35;
+    performanceData.gpuMemoryUsage = newSize * 35; // 32 + (1.5 * 2)
 
     newSize *= 1.5;
 
@@ -1178,6 +1196,7 @@ Draw2D.prototype.uploadBuffer = function (group, count, offset) {
 
   performanceData.dataTransfers += 1;
 
+  // Upload data.
   if (offset === 0) {
     vertexBuffer.setData(vertexData, 0, count);
   } else {
@@ -1255,6 +1274,7 @@ Draw2D.prototype.end = function () {
     return false;
   }
 
+  //dispatch objects to the graphics card
   if (this.dispatch()) {
     this.clearBatch();
   }
@@ -1353,7 +1373,11 @@ Draw2D.prototype.dispatch = function () {
         }
 
         graphicsDevice.setTechniqueParameters(techniqueParameters);
-        graphicsDevice.drawIndexed(graphicsDevice.PRIMITIVE_TRIANGLES, icount, iindex);
+        if (icount === 6) {
+          graphicsDevice.draw(graphicsDevice.PRIMITIVE_TRIANGLE_STRIP, 4, ((iindex / 6) << 2));
+        } else {
+          graphicsDevice.drawIndexed(graphicsDevice.PRIMITIVE_TRIANGLES, icount, iindex);
+        }
 
         iindex += icount;
       }
@@ -1631,18 +1655,18 @@ let additive_blend_state = {
   'BlendFunc': [770, 1]
 };
 let sampler_linear = {
-  'MinFilter': 9985/* LINEAR_MIPMAP_NEAREST */ ,
-  'MagFilter': 9729/* LINEAR */ ,
+  'MinFilter': opengl.LINEAR_MIPMAP_NEAREST,
+  'MagFilter': opengl.LINEAR,
   // clamp or wrap is arbitrary depending on application requirements
-  'WrapS': 33071 /* CLAMP_TO_EDGE */,
-  'WrapT': 33071 /* CLAMP_TO_EDGE */,
+  'WrapS': opengl.CLAMP_TO_EDGE, // opengl.REPEAT
+  'WrapT': opengl.CLAMP_TO_EDGE,
 };
 let sampler_nearest = {
-  'MinFilter': 9728 /*NEAREST*/,
-  'MagFilter': 9728 /*NEAREST*/,
-  // clamp or wrap is arbitrary depending on application requirements
-  'WrapS': 10497 /*REPEAT*/, // 33071 /* CLAMP_TO_EDGE */,
-  'WrapT': 10497 /*REPEAT*/, // 33071 /* CLAMP_TO_EDGE */,
+  'MinFilter': opengl.NEAREST,
+  'MagFilter': opengl.NEAREST,
+  // clamp is required for glov_transitions
+  'WrapS': opengl.CLAMP_TO_EDGE,
+  'WrapT': opengl.CLAMP_TO_EDGE,
 };
 function addShader(shader_def, name, simple_def) {
   assert(!shader_def.techniques[name]);
@@ -1742,10 +1766,10 @@ Draw2D.create = function (params) {
     'name': 'draw2D.cgfx',
     'samplers': {
       'inputTexture0': {
-        'MinFilter': 9728 /* NEAREST */,
-        'MagFilter': 9729 /* LINEAR */,
-        'WrapS': 33071 /* CLAMP_TO_EDGE */,
-        'WrapT': 33071 /* CLAMP_TO_EDGE */,
+        'MinFilter': opengl.NEAREST,
+        'MagFilter': opengl.LINEAR,
+        'WrapS': opengl.CLAMP_TO_EDGE,
+        'WrapT': opengl.CLAMP_TO_EDGE,
       }
     },
     'parameters': {
@@ -2043,22 +2067,10 @@ Draw2D.create = function (params) {
   // updateRenderTargetVBO
   // ---------------------
   o.vertexBufferData = new Draw2D.FloatArray([
-    -1.0,
-    -1.0,
-    0.0,
-    0.0,
-    1.0,
-    -1.0,
-    1.0,
-    0.0,
-    -1.0,
-    1.0,
-    0.0,
-    1.0,
-    1.0,
-    1.0,
-    1.0,
-    1.0
+    -1.0, -1.0, 0.0, 0.0,
+    1.0, -1.0, 1.0, 0.0,
+    -1.0, 1.0, 0.0, 1.0,
+    1.0, 1.0, 1.0, 1.0
   ]);
 
   return o;

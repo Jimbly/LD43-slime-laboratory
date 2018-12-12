@@ -24,6 +24,10 @@ class GlovCamera {
     this.reapply();
   }
 
+  set2DNormalized() {
+    this.set2D(0, 0, 1, 1);
+  }
+
   x0() {
     return this.data[0];
   }
@@ -35,6 +39,12 @@ class GlovCamera {
   }
   y1() {
     return this.data[3];
+  }
+  w() {
+    return this.data[2] - this.data[0];
+  }
+  h() {
+    return this.data[3] - this.data[1];
   }
   xScale() {
     return this.data[4];

@@ -3,8 +3,8 @@
 /*global Z: false */
 
 const assert = require('assert');
-const animation = require('./animation.js');
-const local_storage = require('./local_storage.js');
+const animation = require('./glov/animation.js');
+const local_storage = require('./glov/local_storage.js');
 const particle_data = require('./particle_data.js');
 const random_seed = require('random-seed');
 

@@ -20,16 +20,8 @@ class SoundManager {
     let soundDeviceParameters = {
       linearDistance: false
     };
-    let soundDevice = this.soundDevice = TurbulenzEngine.createSoundDevice(soundDeviceParameters);
+    this.soundDevice = TurbulenzEngine.createSoundDevice(soundDeviceParameters);
     this.soundDevice.listenerTransform = listenerTransform;
-
-    window.document.body.addEventListener('click', function () {
-      soundDevice.resume();
-    });
-    window.document.body.addEventListener('keydown', function () {
-      soundDevice.resume();
-    });
-    
     this.auto_oggs = false; // try loading .ogg versions first, then fallback to .wav
     this.auto_mp3s = false; // try loading .mp3 versions first, then fallback to .wav
     this.sound_on = true;
@@ -72,6 +64,13 @@ class SoundManager {
       }
       return;
     }
+    let key = base;
+    let m = base.match(/^(.*)\.(mp3|ogg|wav)$/u);
+    let preferred_ext;
+    if (m) {
+      base = m[1];
+      preferred_ext = m[2];
+    }
     let src = `sounds/${base}`;
     let tryLoad = (ext) => {
       ++num_loading;
@@ -80,7 +79,7 @@ class SoundManager {
         onload: function (sound) {
           --num_loading;
           if (sound) {
-            sounds[base] = sound;
+            sounds[key] = sound;
             if (cb) {
               return cb();
             }
@@ -94,9 +93,9 @@ class SoundManager {
         }
       });
     };
-    if (this.soundDevice.isSupported('FILEFORMAT_OGG') && this.auto_oggs) {
+    if (this.soundDevice.isSupported('FILEFORMAT_OGG') && (this.auto_oggs || preferred_ext === 'ogg')) {
       tryLoad('.ogg');
-    } else if (this.soundDevice.isSupported('FILEFORMAT_MP3') && this.auto_mp3s) {
+    } else if (this.soundDevice.isSupported('FILEFORMAT_MP3') && (this.auto_mp3s || preferred_ext === 'mp3')) {
       tryLoad('.mp3');
     } else {
       tryLoad('.wav');
@@ -119,6 +118,10 @@ class SoundManager {
         this.music[ii].source.gain = this.music[ii].current_volume;
       }
     }
+  }
+
+  resume() {
+    this.soundDevice.resume();
   }
 
   play(soundname, volume) {
@@ -151,7 +154,9 @@ class SoundManager {
     if (!this.music_on) {
       return;
     }
-    volume = volume || 0;
+    if (volume === undefined) {
+      volume = 1;
+    }
     transition = transition || SoundManager.DEFAULT;
     this.loadSound(soundname, () => {
       if (!sounds[soundname]) {

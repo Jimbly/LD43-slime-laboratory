@@ -1,5 +1,23 @@
+/*
+  example usage:
 
-class Animation {
+  // trigger
+  let alpha = 0;
+  let anim = glov_animation.create();
+  let t = anim.add(0, 300, (progress) => alpha = progress);
+  t = anim.add(t + 1000, 300, (progress) => alpha = 1 - progress);
+
+  // tick
+  if (anim) {
+    if (!anim.update(dt))
+      anim = null;
+    else
+      glov_input.eatAllInput();
+    drawSomething(alpha);
+  }
+*/
+
+class GlovAnimationSequencer {
   constructor() {
     this.time = 0;
     this.fns = [];
@@ -38,5 +56,5 @@ class Animation {
 }
 
 export function create(...args) {
-  return new Animation(...args);
+  return new GlovAnimationSequencer(...args);
 }

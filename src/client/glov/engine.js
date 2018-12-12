@@ -1,13 +1,15 @@
 /* global WebGLTurbulenzEngine:false */
 /* global TurbulenzEngine:true */
-/* global TextureEffects:true */
 /* global VMath: false */
 /* global $:false */
 /* global Z:false */
 
 const { Draw2D } = require('./tz/draw2d.js');
+const { TextureEffects } = require('./tz/texture_effects.js');
 
-const local_storage = require('../local_storage.js');
+const glov_font = require('./font.js');
+const glov_transition = require('./transition.js');
+const local_storage = require('./local_storage.js');
 
 VMath.zero_vec = VMath.v4BuildZero();
 VMath.unit_vec = VMath.v4Build(1, 1, 1, 1);
@@ -45,9 +47,17 @@ export const pico8_colors = [
   VMath.v4Build(1.000, 0.800, 0.667, 1),
 ];
 
-export let postprocessing = !local_storage.get('glov_no_postprocessing');
+export let fps_style = glov_font.style({
+  outline_width: 2, outline_color: 0x00000080,
+  color: 0xFFFFFFff,
+});
+
+// *Maybe* don't need this logic anymore, postprocessing has been improved to be
+// efficient on all devices.
+const postprocessing_reset_version = '2';
+export let postprocessing = local_storage.get('glov_no_postprocessing') !== postprocessing_reset_version;
 export function postprocessingAllow(allow) {
-  local_storage.set('glov_no_postprocessing', allow ? undefined : 1);
+  local_storage.set('glov_no_postprocessing', allow ? undefined : postprocessing_reset_version);
   postprocessing = allow;
 }
 
@@ -82,33 +92,69 @@ export function setState(new_state) {
   }
 }
 
+let mspf = 1000;
+let mspf_update_time = Date.now();
+let mspf_frame_count = 0;
+let show_fps = false;
+
 let do_borders = true;
+let need_repos = 0;
 
 let app_tick_functions = [];
 export function addTickFunc(cb) {
   app_tick_functions.push(cb);
 }
 
-let render_targets = [];
-let render_target_idx = 0;
-let frame_effects = [];
+let temporary_textures = {};
 
 function resetEffects() {
-  render_target_idx = 0;
-  frame_effects.length = 0;
-}
-
-function getTarget() {
-  if (render_target_idx >= render_targets.length) {
-    render_targets.push(draw_2d.createRenderTarget({}));
+  for (let key in temporary_textures) {
+    let temp = temporary_textures[key];
+    // Release unused textures
+    while (temp.list.length > temp.idx) {
+      temp.list.pop().destroy();
+    }
+    if (!temp.idx) {
+      delete temporary_textures[key];
+    } else {
+      temp.idx = 0;
+    }
   }
-  return render_targets[render_target_idx++];
 }
 
-function doFrameEffect(index) {
-  frame_effects[index].fn(draw_2d.getRenderTargetTexture(frame_effects[index].src),
-    draw_2d.getRenderTarget(frame_effects[index].dest));
-  draw_2d.setRenderTarget(frame_effects[index].dest);
+export function getTextureForCapture() {
+  return graphics_device.createTexture({
+    mipmaps: false,
+    dynamic: true,
+    src: null,
+    format: 'R8G8B8', // or maybe 'R8G8B8A8'
+    name: 'screen_temporary_tex',
+    data: null,
+    no_data: true,
+  });
+}
+
+export function getTemporaryTexture(w, h) {
+  let key = w ? `${w}_${h}` : 'screen';
+  let temp = temporary_textures[key];
+  if (!temp) {
+    temp = temporary_textures[key] = { list: [], idx: 0 };
+  }
+  if (temp.idx >= temp.list.length) {
+    let tex = getTextureForCapture();
+    temp.list.push(tex);
+  }
+  return temp.list[temp.idx++];
+}
+
+export function captureFramebuffer(w, h) {
+  let tex = getTemporaryTexture(w, h);
+  if (w) {
+    tex.copyTexImage(0, 0, w, h);
+  } else {
+    tex.copyTexImage();
+  }
+  return tex;
 }
 
 let last_tick = Date.now();
@@ -125,14 +171,21 @@ function tick() {
   global_timer += dt;
   ++global_frame_index;
 
+  ++mspf_frame_count;
+  if (now - mspf_update_time > 1000) {
+    mspf = (now - mspf_update_time) / mspf_frame_count;
+    mspf_frame_count = 0;
+    mspf_update_time = now;
+  }
+
   glov_camera.tick();
   glov_camera.set2DAspectFixed(game_width, game_height);
   sound_manager.tick(dt);
   glov_input.tick();
-  glov_ui.tick();
+  glov_ui.tick(dt);
 
-  if (window.need_repos) {
-    --window.need_repos;
+  if (need_repos) {
+    --need_repos;
     let ul = [];
     glov_camera.virtualToPhysical(ul, [0,0]);
     let lr = [];
@@ -141,13 +194,6 @@ function tick() {
     let height = viewport[3] - viewport[1];
     // default font size of 16 when at height of game_height
     let font_size = Math.min(256, Math.max(2, Math.floor(height/800 * 16)));
-    $('#gamescreen').css({
-      left: viewport[0],
-      top: viewport[1],
-      width: viewport[2] - viewport[0],
-      height: height,
-      'font-size': font_size,
-    });
     $('#fullscreen').css({
       'font-size': font_size,
     });
@@ -171,22 +217,21 @@ function tick() {
   if (app_state) {
     app_state(dt);
   }
+  if (show_fps) {
+    glov_camera.set2DAspectFixed(game_width, game_height);
+    font.drawSizedAligned(fps_style, glov_camera.x0(), glov_camera.y0(), Z.FPSMETER, glov_ui.font_height,
+      glov_font.ALIGN.HRIGHT, glov_camera.w(), 0, `FPS: ${(1000 / mspf).toFixed(1)} (${mspf.toFixed(0)}ms/f)`);
+  }
 
   glov_particles.tick(dt); // *after* app_tick, so newly added/killed particles can be queued into the draw list
+  glov_transition.render(dt);
 
-  if (frame_effects.length) {
-    draw_2d.setRenderTarget(frame_effects[0].src);
-  } else {
-    draw_2d.setBackBuffer();
-  }
+  // Above is queuing, below is actual drawing
+
+  draw_2d.setBackBuffer();
   draw_2d.clear([0, 0, 0, 1]);
 
   draw_list.draw();
-
-  if (frame_effects.length) {
-    draw_2d.setBackBuffer();
-    draw_2d.copyRenderTarget(frame_effects[frame_effects.length - 1].dest);
-  }
 
   glov_ui.endFrame();
   graphics_device.endFrame();
@@ -196,8 +241,10 @@ function tick() {
 
 
 export function startup(params) {
+  let canvas = params.canvas;
+  canvas.focus();
   TurbulenzEngine = WebGLTurbulenzEngine.create({
-    canvas: params.canvas,
+    canvas: canvas,
     fillParent: true
   });
   if (!TurbulenzEngine) {
@@ -211,7 +258,7 @@ export function startup(params) {
   graphics_device = TurbulenzEngine.createGraphicsDevice({});
   let draw2d_params = { graphicsDevice: graphics_device, shaders: params.shaders || {} };
   /* eslint-disable global-require */
-  const glov_font = require('./font.js');
+  glov_transition.populateDraw2DParams(draw2d_params);
   glov_font.populateDraw2DParams(draw2d_params);
   draw_2d = Draw2D.create(draw2d_params);
   glov_camera = require('./camera.js').create(graphics_device, draw_2d);
@@ -221,9 +268,8 @@ export function startup(params) {
   glov_sprite = require('./sprite.js').create(graphics_device, draw_list);
   glov_particles = require('./particles.js').create(draw_list, glov_sprite);
 
-  effects = TextureEffects.create({
+  effects = new TextureEffects({
     graphicsDevice: graphics_device,
-    mathDevice: VMath,
   });
 
   draw_list.setNearest(params.pixely);
@@ -244,11 +290,24 @@ export function startup(params) {
 
   glov_camera.set2DAspectFixed(game_width, game_height);
 
+  function onResize() {
+    // This used to be here, but it breaks mobile devices / edit boxes
+    //canvas.focus();
+
+    // For the next 10 frames, make sure font size is correct
+    need_repos = 10;
+  }
+  window.addEventListener('resize', onResize, false);
+  onResize();
+
   if (params.state) {
     setState(params.state);
   }
   if (params.do_borders !== undefined) {
     do_borders = params.do_borders;
+  }
+  if (params.show_fps !== undefined) {
+    show_fps = params.show_fps;
   }
 
   // TODO: Use requestAnimationFrame instead?
@@ -256,37 +315,15 @@ export function startup(params) {
   /* eslint-enable global-require */
 }
 
-// Example effects can be found at:
-// Src:  http://biz.turbulenz.com/sample_assets/textureeffects.js.html
-// Demo: http://biz.turbulenz.com/samples#sample-modal/samplepage/sample_assets/textureeffects.canvas.release.html/samplesrc/sample_assets/textureeffects.js.html
-export function queueFrameEffect(z, fn) {
-  let src;
-  if (frame_effects.length === 0) {
-    src = getTarget();
-  } else {
-    src = frame_effects[frame_effects.length - 1].dest;
-  }
-  draw_list.queuefn(doFrameEffect.bind(null, frame_effects.length), 0, 0, z, null);
-  let dest = getTarget();
-  frame_effects.push({
-    z,
-    fn,
-    src,
-    dest,
-  });
-}
-
-export function getTemporaryTarget() {
-  return draw_2d.getRenderTarget(getTarget());
-}
-
 function loading() {
   let load_count = glov_sprite.loading() + sound_manager.loading();
   $('#loading_text').text(`Loading (${load_count})...`);
   if (!load_count) {
-    $('.screen').hide();
+    $('#loading').fadeOut(200);
     is_loading = false;
     app_state = after_loading_state;
   }
 }
 app_state = loading;
+
+window.glov_engine = exports;
